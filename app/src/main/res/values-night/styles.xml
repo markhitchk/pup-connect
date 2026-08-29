@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.PupConnect" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:statusBarColor">@color/pc_app_bar</item>
+        <item name="android:navigationBarColor">@color/pc_nav_bg</item>
+        <item name="android:windowBackground">@color/pc_bg</item>
+        <item name="android:colorAccent">@color/pc_cyan</item>
+    </style>
+</resources>

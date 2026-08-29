@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="pc_bg">#0b0e12</color>
+    <color name="pc_panel">#12171c</color>
+    <color name="pc_surface2">#182027</color>
+    <color name="pc_app_bar">#0d1217</color>
+    <color name="pc_cyan">#00b8f0</color>
+    <color name="pc_text">#e8f8ff</color>
+    <color name="pc_muted">#aebbc2</color>
+    <color name="pc_border">#29404d</color>
+    <color name="pc_divider">#243944</color>
+    <color name="pc_nav_bg">#10171d</color>
+    <color name="pc_nav_pressed">#17303b</color>
+    <color name="pc_status_chip">#162128</color>
+    <color name="pc_on_accent">#061013</color>
+</resources>
