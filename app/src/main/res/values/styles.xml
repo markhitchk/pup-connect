@@ -50,7 +50,7 @@
 
     <style name="PupConnect.BottomNavItem" parent="@android:style/Widget.Material.TextView">
         <item name="android:textSize">11sp</item>
-        <item name="android:textColor">@color/nav_text_selector</item>
+        <item name="android:textColor">@color/pc_muted</item>
         <item name="android:gravity">center</item>
         <item name="android:background">@drawable/bottom_nav_item_background</item>
         <item name="android:focusable">true</item>
