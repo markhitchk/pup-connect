@@ -1,10 +1,61 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.PupConnect" parent="android:style/Theme.Material.NoActionBar">
+    <style name="Theme.PupConnect" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@drawable/splash_background</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:alertDialogTheme">@style/Theme.PupConnect.Dialog.Alert</item>
         <item name="android:fontFamily">sans</item>
-        <item name="android:statusBarColor">@color/pc_app_bar</item>
-        <item name="android:navigationBarColor">@color/pc_nav_bg</item>
-        <item name="android:windowBackground">@color/pc_bg</item>
         <item name="android:colorAccent">@color/pc_cyan</item>
+        <item name="android:statusBarColor">@color/pc_bg</item>
+        <item name="android:navigationBarColor">@color/pc_bg</item>
+    </style>
+
+    <style name="Theme.PupConnect.Dialog.Alert" parent="@android:style/Theme.Material.Dialog.Alert">
+        <item name="android:textColorPrimary">@color/pc_text</item>
+        <item name="android:textColorSecondary">@color/pc_muted</item>
+        <item name="android:colorBackground">@color/pc_panel</item>
+        <item name="android:windowBackground">@drawable/dialog_background</item>
+        <item name="android:windowMinWidthMajor">88%</item>
+        <item name="android:windowMinWidthMinor">88%</item>
+        <item name="android:colorAccent">@color/pc_cyan_bright</item>
+        <item name="android:buttonBarButtonStyle">@style/PupConnectDialogButton</item>
+    </style>
+
+    <style name="PupConnectDialogButton" parent="@android:style/Widget.Material.Button.Borderless">
+        <item name="android:textColor">@color/pc_cyan_bright</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:minHeight">44dp</item>
+        <item name="android:minWidth">72dp</item>
+    </style>
+
+    <style name="PupConnectDrawerItem" parent="@android:style/Widget.Material.Button">
+        <item name="android:textSize">@dimen/drawer_item_text</item>
+        <item name="android:textColor">@color/pc_text</item>
+        <item name="android:gravity">start|center_vertical</item>
+        <item name="android:background">@drawable/drawer_item_background</item>
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">@dimen/drawer_item_height</item>
+        <item name="android:layout_marginBottom">5dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:minHeight">0dp</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:drawablePadding">10dp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:paddingStart">14dp</item>
+        <item name="android:paddingEnd">12dp</item>
+    </style>
+
+    <style name="PupConnect.BottomNavItem" parent="@android:style/Widget.Material.TextView">
+        <item name="android:textSize">11sp</item>
+        <item name="android:textColor">@color/nav_text_selector</item>
+        <item name="android:gravity">center</item>
+        <item name="android:background">@drawable/bottom_nav_item_background</item>
+        <item name="android:focusable">true</item>
+        <item name="android:clickable">true</item>
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:maxLines">2</item>
+        <item name="android:layout_weight">1</item>
     </style>
 </resources>
