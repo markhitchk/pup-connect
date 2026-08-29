@@ -451,7 +451,7 @@
                             android:layout_weight="1"
                             android:background="@drawable/address_bar_background"
                             android:hint="Message"
-                            android:hintTextColor="@color/pc_hint"
+                            android:textColorHint="@color/pc_hint"
                             android:maxLines="3"
                             android:paddingStart="12dp"
                             android:paddingEnd="12dp"
