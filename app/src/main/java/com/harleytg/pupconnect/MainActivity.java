@@ -41,7 +41,11 @@ public class MainActivity extends Activity {
     private static final String PREF_NAME = "identity_name";
     private static final String PREF_LAST_ROOM = "last_room";
     private static final String PREF_LAST_ROOM_MODE = "last_room_mode";
+    private static final String PREF_ALERTS_READ = "alerts_read";
     private static final String MESSAGE_PREFIX = "messages_";
+    private static final String STATE_SCREEN = "state_screen";
+    private static final String STATE_ACTIVE_ROOM = "state_active_room";
+    private static final String STATE_ROOM_OPEN = "state_room_open";
     private static final int REQUEST_VOICE = 401;
     private static final int REQUEST_VIDEO = 402;
 
@@ -104,7 +108,8 @@ public class MainActivity extends Activity {
         wireIdentityAndSettings();
         updateIdentityUi();
         updateRecentRoomUi();
-        selectScreen(Screen.CHATS);
+        applyAlertState();
+        restoreUiState(savedInstanceState);
         runStartupState();
     }
 
@@ -667,9 +672,40 @@ public class MainActivity extends Activity {
     }
 
     private void markAlertsRead() {
-        notificationBadge.setVisibility(View.GONE);
-        setupNoticeCard.setVisibility(View.GONE);
+        prefs.edit().putBoolean(PREF_ALERTS_READ, true).apply();
+        applyAlertState();
         Toast.makeText(this, "Alerts marked read", Toast.LENGTH_SHORT).show();
+    }
+
+    private void applyAlertState() {
+        boolean alertsRead = prefs.getBoolean(PREF_ALERTS_READ, false);
+        notificationBadge.setVisibility(alertsRead ? View.GONE : View.VISIBLE);
+        setupNoticeCard.setVisibility(alertsRead ? View.GONE : View.VISIBLE);
+    }
+
+    private void restoreUiState(Bundle savedInstanceState) {
+        if (savedInstanceState == null) {
+            selectScreen(Screen.CHATS);
+            return;
+        }
+
+        Screen restoredScreen = Screen.CHATS;
+        String screenName = savedInstanceState.getString(STATE_SCREEN, Screen.CHATS.name());
+        try {
+            restoredScreen = Screen.valueOf(screenName);
+        } catch (IllegalArgumentException ignored) {
+            restoredScreen = Screen.CHATS;
+        }
+
+        String restoredRoom = savedInstanceState.getString(STATE_ACTIVE_ROOM);
+        boolean roomWasOpen = savedInstanceState.getBoolean(STATE_ROOM_OPEN, false);
+        if (roomWasOpen && restoredRoom != null && !restoredRoom.isEmpty()) {
+            String mode = prefs.getString(PREF_LAST_ROOM_MODE, "Local");
+            openRoom(restoredRoom, mode == null ? "Local" : mode);
+        } else {
+            leaveRoomView();
+        }
+        selectScreen(restoredScreen);
     }
 
     private void showEditIdentityDialog() {
@@ -779,6 +815,20 @@ public class MainActivity extends Activity {
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        outState.putString(STATE_SCREEN, currentScreen.name());
+        outState.putString(STATE_ACTIVE_ROOM, activeRoomCode);
+        outState.putBoolean(STATE_ROOM_OPEN, roomPanel != null && roomPanel.getVisibility() == View.VISIBLE);
+        super.onSaveInstanceState(outState);
+    }
+
+    @Override
+    protected void onDestroy() {
+        handler.removeCallbacksAndMessages(null);
+        super.onDestroy();
     }
 
     @Override
