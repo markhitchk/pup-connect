@@ -1,4 +1,4 @@
-import { parseStun } from "./hive";
+import { HiveSignaling, parseStun } from "./hive";
 import { parseInvite } from "../../shared/protocol";
 import "react-native-url-polyfill/auto";
 test("discovery accepts bounded STUN settings without a private server URL", () => {
@@ -22,4 +22,22 @@ test("hive invitations pin the Noise peer key while preserving the six digit cod
     parseInvite(`pupconnect://join?code=123456&invite=${invite}&hive=${key}`)
   ).toEqual({ code: "123456", invite, hiveHost: key });
   expect(() => parseInvite("pupconnect://join?code=123456&hive=bad")).toThrow();
+});
+
+test("duplicate connectivity notifications retain the active worker", async () => {
+  const worker = require("../../hive/generated").default;
+  worker.start.mockClear();
+  const s = new HiveSignaling(jest.fn(), jest.fn(), jest.fn());
+  s.start("", { type: "create", name: "Host" });
+  await new Promise<void>((r) => setTimeout(r, 0));
+  expect(worker.start).toHaveBeenCalledTimes(1);
+  s.setNetwork(true);
+  s.setNetwork(true);
+  await new Promise<void>((r) => setTimeout(r, 0));
+  expect(worker.start).toHaveBeenCalledTimes(1);
+  s.setNetwork(false);
+  s.setNetwork(true);
+  await new Promise<void>((r) => setTimeout(r, 0));
+  expect(worker.start).toHaveBeenCalledTimes(2);
+  s.stop();
 });

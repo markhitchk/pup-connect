@@ -87,7 +87,7 @@ export class HiveSignaling {
   private async ensure(generation: number): Promise<IPC> {
     if (this.ipc && !this.ipc.destroyed) return this.ipc;
     if (this.initializing) return this.initializing;
-    this.initializing = (async () => {
+    const pending = (async () => {
       const seed = await loadIdentity();
       const snapshot = await vault.get("hive:snapshot");
       const { ipc } = await worker.start({
@@ -130,10 +130,11 @@ export class HiveSignaling {
       Worklet.update(this.foreground ? "active" : "background");
       return ipc;
     })();
+    this.initializing = pending;
     try {
-      return await this.initializing;
+      return await pending;
     } finally {
-      this.initializing = undefined;
+      if (this.initializing === pending) this.initializing = undefined;
     }
   }
   private read(chunk: Uint8Array, generation: number) {
@@ -220,6 +221,7 @@ export class HiveSignaling {
     );
   }
   setNetwork(online: boolean) {
+    if (this.online === online) return;
     this.online = online;
     if (!online) {
       this.shutdown();

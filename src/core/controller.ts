@@ -171,7 +171,6 @@ export class Controller {
           this.network = online;
           this.signaling.setNetwork(online);
           if (changed && online) {
-            this.signaling.reconnect();
             this.restart("data");
             if (this.state.call) this.restart("media");
           }

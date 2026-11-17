@@ -41,7 +41,15 @@ function client(bootstrap) {
   };
 }
 (async () => {
-  const seed = DHT.bootstrapper(0, "127.0.0.1");
+  // bootstrapper requires a nonzero port; reserve an ephemeral UDP port first.
+  const socket = require("node:dgram").createSocket("udp4");
+  await new Promise((resolve, reject) => {
+    socket.once("error", reject);
+    socket.bind(0, "127.0.0.1", resolve);
+  });
+  const port = socket.address().port;
+  await new Promise((resolve) => socket.close(resolve));
+  const seed = DHT.bootstrapper(port, "127.0.0.1");
   await seed.ready();
   const address = seed.address();
   assert(address);
