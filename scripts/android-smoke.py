@@ -2,7 +2,7 @@
 import pathlib, subprocess, time, xml.etree.ElementTree as ET
 out = pathlib.Path('android-smoke'); out.mkdir(exist_ok=True)
 def adb(*args):
-    return subprocess.check_output(['adb', *args])
+    return subprocess.check_output(['adb', *args], timeout=90)
 def snapshot(label):
     adb('shell','uiautomator','dump','/sdcard/pup-window.xml')
     raw=adb('shell','cat','/sdcard/pup-window.xml')
@@ -13,7 +13,16 @@ def snapshot(label):
     return root
 def tap_label(label):
     root=snapshot('before-'+label.lower())
-    node=next(n for n in root.iter('node') if n.get('content-desc')==label)
+    for attempt in range(4):
+        node=next((n for n in root.iter('node') if n.get('content-desc')==label), None)
+        if node is not None: break
+        scroll=next(n for n in root.iter('node') if n.get('class')=='android.widget.ScrollView')
+        import re
+        x1,y1,x2,y2=map(int,re.findall(r'\d+',scroll.get('bounds')))
+        adb('shell','input','swipe',str((x1+x2)//2),str(y2-50),str((x1+x2)//2),str(y1+50),'250')
+        time.sleep(1)
+        root=snapshot('scroll-'+label.lower()+str(attempt))
+    assert node is not None, label
     import re
     x1,y1,x2,y2=map(int,re.findall(r'\d+',node.get('bounds')))
     adb('shell','input','tap',str((x1+x2)//2),str((y1+y2)//2))
@@ -48,6 +57,25 @@ for _ in range(20):
     if any(n.get('content-desc') == 'Display name' and n.get('text') == 'Smoke_Pup' for n in root.iter('node')):
         break
 else: raise AssertionError('Encrypted display name and navigation did not survive process restart')
+def fill_label(label,value):
+    root=tap_label(label)
+    field=next(n for n in root.iter('node') if n.get('content-desc')==label)
+    adb('shell','input','keyevent','KEYCODE_MOVE_END')
+    if field.get('text'): adb('shell','input','keyevent',*(['KEYCODE_DEL']*len(field.get('text'))))
+    if value: adb('shell','input','text',value)
+    adb('shell','input','keyevent','KEYCODE_BACK')
+fill_label('Signaling URL','wss://example.invalid/ws')
+tap_label('Save connection')
+# Exercise custom URI parsing on Android, without substituting a fake room/service.
+import shlex
+invitation='pupconnect://join?code=123456&invite='+'a'*64
+adb('shell','am start -W -a android.intent.action.VIEW -d '+shlex.quote(invitation)+' com.harleytg.pupconnect')
+time.sleep(1)
+tap_label('Join Room')
+tap_label('Cancel connection')
+tap_label('Settings')
+fill_label('Signaling URL','')
+tap_label('Save connection')
 tap_label('Chats')
 adb('shell','settings','put','system','accelerometer_rotation','0')
 adb('shell','settings','put','system','user_rotation','1');time.sleep(2)
