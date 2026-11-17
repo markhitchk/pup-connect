@@ -23,7 +23,19 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
-      - run: npm test
+      - name: Record dependency audit
+        run: npm audit --json > dependency-audit.json || test -s dependency-audit.json
+      - name: Run room, messaging, media and UI checks
+        run: |
+          set -o pipefail
+          npm test | tee tests.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Pup-Connect-checks-${{ github.run_number }}
+          path: |
+            tests.log
+            dependency-audit.json
       - name: Install coturn for actual relay verification
         run: |
           sudo apt-get update -qq
@@ -40,7 +52,6 @@ jobs:
       - name: Build standalone signaling container
         run: docker build -f server/Dockerfile -t pup-connect-signaling:test .
   android:
-    needs: checks
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -71,7 +82,9 @@ jobs:
         working-directory: android
         env:
           PUP_INVITE_HOST: ${{ vars.PUP_INVITE_HOST }}
-        run: ./gradlew assembleDebug assembleBeta --stacktrace --console=plain -PreactNativeArchitectures=arm64-v8a,x86_64 | tee build.log
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug assembleBeta --stacktrace --console=plain -PreactNativeArchitectures=arm64-v8a,x86_64 | tee build.log
       - name: Verify beta APK signature and 16 KB alignment
         run: |
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs android/app/build/outputs/apk/beta/app-beta.apk
