@@ -1111,98 +1111,114 @@ export function PupApp() {
       </Modal>
       <Modal visible={!!call} animationType="slide" onRequestClose={() => {}}>
         <SafeAreaView style={s.call}>
-          {call && (
-            <>
-              {title(`${call.video ? "Video" : "Voice"} call`)}
-              {text(peer?.name || "Your peer")}
-              {text(
-                `${
-                  call.phase === "incoming"
-                    ? "Incoming call"
-                    : call.phase === "outgoing"
-                    ? "Calling…"
-                    : call.phase === "connecting"
-                    ? "Connecting…"
-                    : `${Math.floor(duration / 60)}:${String(
-                        duration % 60
-                      ).padStart(2, "0")}`
-                } · ${call.quality}`,
-                true
-              )}
-              {call.video && call.phase !== "incoming" && (
-                <View style={{ flex: 1, gap: 8 }}>
-                  {state.remoteStream ? (
-                    <RTCView
-                      streamURL={state.remoteStream}
-                      style={s.video}
-                      objectFit="contain"
-                    />
-                  ) : (
-                    <View
-                      style={[
-                        s.video,
-                        { alignItems: "center", justifyContent: "center" },
-                      ]}
-                    >
-                      {text("Waiting for peer video", true)}
-                    </View>
-                  )}
-                  {state.localStream && call.camera && (
-                    <RTCView
-                      streamURL={state.localStream}
-                      mirror
-                      objectFit="contain"
-                      style={{
-                        height: Math.min(height / 4, 160),
-                        width: "45%",
-                        alignSelf: "flex-end",
-                      }}
-                    />
-                  )}
-                </View>
-              )}
-              {call.phase === "incoming" ? (
-                <>
-                  {button("Accept call", () => controller.accept(), true)}
-                  {button("Decline call", () => controller.endCall("declined"))}
-                </>
-              ) : (
-                <>
-                  <View style={[s.row, { flexWrap: "wrap" }]}>
-                    {button(
-                      call.muted ? "Unmute microphone" : "Mute microphone",
-                      () => controller.mute()
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ flexGrow: 1, gap: 12, paddingBottom: 12 }}
+          >
+            {call && (
+              <>
+                {title(`${call.video ? "Video" : "Voice"} call`)}
+                {text(peer?.name || "Your peer")}
+                {text(
+                  `${
+                    call.phase === "incoming"
+                      ? "Incoming call"
+                      : call.phase === "outgoing"
+                      ? "Calling…"
+                      : call.phase === "connecting"
+                      ? "Connecting…"
+                      : `${Math.floor(duration / 60)}:${String(
+                          duration % 60
+                        ).padStart(2, "0")}`
+                  } · ${call.quality}`,
+                  true
+                )}
+                {call.video && call.phase !== "incoming" && (
+                  <View
+                    style={{
+                      height: Math.max(220, Math.min(height * 0.5, 540)),
+                      gap: 8,
+                    }}
+                  >
+                    {state.remoteStream ? (
+                      <RTCView
+                        streamURL={state.remoteStream}
+                        style={s.video}
+                        objectFit="contain"
+                      />
+                    ) : (
+                      <View
+                        style={[
+                          s.video,
+                          { alignItems: "center", justifyContent: "center" },
+                        ]}
+                      >
+                        {text("Waiting for peer video", true)}
+                      </View>
                     )}
-                    {button(
-                      call.route === "speaker" ? "Use earpiece" : "Use speaker",
-                      () =>
-                        controller.route(
-                          call.route === "speaker" ? "earpiece" : "speaker"
-                        )
-                    )}
-                    {button("Use Bluetooth", () =>
-                      controller.route("bluetooth")
+                    {state.localStream && call.camera && (
+                      <RTCView
+                        streamURL={state.localStream}
+                        mirror
+                        objectFit="contain"
+                        style={{
+                          height: Math.min(height / 4, 160),
+                          width: "45%",
+                          alignSelf: "flex-end",
+                        }}
+                      />
                     )}
                   </View>
-                  {call.video && (
+                )}
+                {call.phase === "incoming" ? (
+                  <>
+                    {button("Accept call", () => controller.accept(), true)}
+                    {button("Decline call", () =>
+                      controller.endCall("declined")
+                    )}
+                  </>
+                ) : (
+                  <>
                     <View style={[s.row, { flexWrap: "wrap" }]}>
                       {button(
-                        call.camera ? "Disable camera" : "Enable camera",
-                        () => controller.camera()
+                        call.muted ? "Unmute microphone" : "Mute microphone",
+                        () => controller.mute()
                       )}
                       {button(
-                        "Switch camera",
-                        () => controller.switchCamera(),
-                        false,
-                        !state.localStream
+                        call.route === "speaker"
+                          ? "Use earpiece"
+                          : "Use speaker",
+                        () =>
+                          controller.route(
+                            call.route === "speaker" ? "earpiece" : "speaker"
+                          )
+                      )}
+                      {button("Use Bluetooth", () =>
+                        controller.route("bluetooth")
                       )}
                     </View>
-                  )}
-                  {button("End call", () => controller.endCall("ended"), true)}
-                </>
-              )}
-            </>
-          )}
+                    {call.video && (
+                      <View style={[s.row, { flexWrap: "wrap" }]}>
+                        {button(
+                          call.camera ? "Disable camera" : "Enable camera",
+                          () => controller.camera()
+                        )}
+                        {button(
+                          "Switch camera",
+                          () => controller.switchCamera(),
+                          false,
+                          !state.localStream
+                        )}
+                      </View>
+                    )}
+                  </>
+                )}
+              </>
+            )}
+          </ScrollView>
+          {call &&
+            call.phase !== "incoming" &&
+            button("End call", () => controller.endCall("ended"), true)}
         </SafeAreaView>
       </Modal>
     </SafeAreaView>
