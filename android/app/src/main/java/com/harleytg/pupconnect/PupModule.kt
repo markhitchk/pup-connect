@@ -31,7 +31,11 @@ class PupPackage : ReactPackage {
 class PupModule(private val ctx: ReactApplicationContext) : ReactContextBaseJavaModule(ctx) {
     companion object { var instance: PupModule? = null }
     private val worker = Executors.newSingleThreadExecutor()
-    private val db by lazy {ctx.openOrCreateDatabase("pup-encrypted.sqlite",0,null).apply {execSQL("CREATE TABLE IF NOT EXISTS vault (id TEXT PRIMARY KEY, payload BLOB NOT NULL)");execSQL("PRAGMA secure_delete=ON")}}
+    private val db by lazy {ctx.openOrCreateDatabase("pup-encrypted.sqlite",0,null).apply {
+        execSQL("CREATE TABLE IF NOT EXISTS vault (id TEXT PRIMARY KEY, payload BLOB NOT NULL)")
+        // This PRAGMA returns a row; Android rejects it through execSQL.
+        rawQuery("PRAGMA secure_delete=ON",null).use {it.moveToFirst()}
+    }}
     private val key: SecretKey by lazy {
         val store = KeyStore.getInstance("AndroidKeyStore").apply {load(null)}
         (store.getKey("pup-vault-v1",null) as? SecretKey) ?: KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES,"AndroidKeyStore").apply {

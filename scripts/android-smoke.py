@@ -8,7 +8,9 @@ def snapshot(label):
     raw=adb('shell','cat','/sdcard/pup-window.xml')
     (out/f'{label}.xml').write_bytes(raw)
     (out/f'{label}.png').write_bytes(adb('exec-out','screencap','-p'))
-    return ET.fromstring(raw)
+    root = ET.fromstring(raw)
+    assert not any(n.get('content-desc') == 'Dismiss status' for n in root.iter('node')), f'Unexpected app error in {label}; inspect XML/screenshot'
+    return root
 def tap_label(label):
     root=snapshot('before-'+label.lower())
     node=next(n for n in root.iter('node') if n.get('content-desc')==label)
@@ -28,6 +30,25 @@ else: raise AssertionError('Bundled app did not reach Chats')
 for label,expected in [('Calls','RECENT CALLS'),('Pack','Your room, your pack'),('Settings','App Settings'),('Chats','No recent rooms')]:
     root=tap_label(label)
     assert any(n.get('text')==expected for n in root.iter('node')), (label,expected)
+# Exercise real Android Keystore encryption and SQLite decryption across process death.
+tap_label('Settings')
+root = tap_label('Display name')
+field = next(n for n in root.iter('node') if n.get('content-desc') == 'Display name')
+adb('shell','input','keyevent','KEYCODE_MOVE_END')
+if field.get('text'):
+    adb('shell','input','keyevent',*(['KEYCODE_DEL'] * len(field.get('text'))))
+adb('shell','input','text','Smoke_Pup')
+adb('shell','input','keyevent','KEYCODE_BACK')
+tap_label('Save display name')
+adb('shell','am','force-stop','com.harleytg.pupconnect')
+adb('shell','am','start','-W','com.harleytg.pupconnect/.MainActivity')
+for _ in range(20):
+    time.sleep(1)
+    root = snapshot('encrypted-reload')
+    if any(n.get('content-desc') == 'Display name' and n.get('text') == 'Smoke_Pup' for n in root.iter('node')):
+        break
+else: raise AssertionError('Encrypted display name and navigation did not survive process restart')
+tap_label('Chats')
 adb('shell','settings','put','system','accelerometer_rotation','0')
 adb('shell','settings','put','system','user_rotation','1');time.sleep(2)
 root=snapshot('landscape')
@@ -44,4 +65,4 @@ assert adb('shell','pidof','com.harleytg.pupconnect').strip()
 logs=adb('logcat','-d','-s','AndroidRuntime:E')
 (out/'runtime.log').write_bytes(logs)
 assert b'FATAL EXCEPTION' not in logs
-print('Beta install, launch, navigation, rotation, theme and foreground smoke passed.')
+print('Beta install, launch, navigation, Keystore/SQLite restart persistence, rotation, theme and foreground smoke passed.')
