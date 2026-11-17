@@ -21,8 +21,7 @@ npm run android
 
 ```sh
 # Standard Android debug identity, for TEST builds only:
-mkdir -p "$HOME/.android"
-keytool -genkeypair -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname 'CN=Android Debug,O=Android,C=US'
+# Android Gradle Plugin creates its default test identity when needed.
 npm run android:beta
 adb install -r android/app/build/outputs/apk/beta/app-beta.apk
 ```

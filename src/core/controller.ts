@@ -51,6 +51,10 @@ export class Controller {
   private earlyIce = new Map<string, RtcSignal[]>();
   private messageWrites = Promise.resolve();
   private clearingHistory = false;
+  private pendingCallEnds = new Map<
+    string,
+    { roomId: string; packet: Extract<DataPacket, { type: "call-end" }> }
+  >();
   private rtcAttempts = { data: 0, media: 0 };
   private tick?: ReturnType<typeof setInterval>;
   private callTimer?: ReturnType<typeof setTimeout>;
@@ -191,6 +195,16 @@ export class Controller {
         DeviceEventEmitter.addListener("pupEndCall", () =>
           this.run(() => this.endCall("ended"))
         ).remove
+      );
+      this.unsubs.push(
+        DeviceEventEmitter.addListener("pupCallExpired", (id) => {
+          if (this.state.call?.id === id)
+            this.run(() =>
+              this.endCall(
+                this.state.call?.phase === "outgoing" ? "missed" : "failed"
+              )
+            );
+        }).remove
       );
       this.unsubs.push(
         DeviceEventEmitter.addListener("pupInterruption", (kind) => {
@@ -361,6 +375,7 @@ export class Controller {
   async closed(reason: string) {
     this.patch({ session: undefined });
     this.earlyIce.clear();
+    this.pendingCallEnds.clear();
     await this.endCall("ended");
     this.data?.close();
     this.data = undefined;
@@ -460,6 +475,7 @@ export class Controller {
         this.rtcAttempts.data = 0;
         this.lastPong = Date.now();
         this.patch({ presence: this.state.call ? "In call" : "Online" });
+        this.syncEndedCalls();
         this.run(() => this.flush());
         this.run(async () => {
           await this.markRead();
@@ -486,6 +502,7 @@ export class Controller {
         connectedAt: this.state.call.connectedAt || Date.now(),
       };
       this.patch({ call: c, presence: "In call" });
+      native.callConnected(c.id);
       clearTimeout(this.callTimer);
       this.run(() => this.saveCall(c));
     } else if (status === "failed" || status === "disconnected") {
@@ -503,6 +520,10 @@ export class Controller {
   }
   private restart(lane: Lane) {
     if (!this.network || !this.state.session) return;
+    if (lane === "media" && !this.state.call) {
+      this.syncEndedCalls();
+      return;
+    }
     this.rtcQueue = this.rtcQueue
       .then(async () => {
         if (lane === "data" && this.state.session?.role === "host") {
@@ -723,9 +744,10 @@ export class Controller {
         throw Error("Another call arrived. Answer or decline it first.");
       const session = this.snapshot().session;
       if (!session) throw Error("Room closed before the call started.");
-      await native.startCall(video);
+      const id = native.randomId();
+      await native.startCall(video, id);
       const call: CallState = {
-        id: native.randomId(),
+        id,
         roomId: session.id,
         video,
         incoming: false,
@@ -738,6 +760,7 @@ export class Controller {
       };
       this.patch({ call });
       await this.saveCall(call);
+      if (this.snapshot().call?.id !== id) return;
       if (!this.data?.send({ type: "call-invite", id: call.id, video }))
         throw Error("Peer disconnected.");
       this.callTimer = setTimeout(
@@ -758,7 +781,7 @@ export class Controller {
     if (!call || call.phase !== "incoming") return;
     await this.permissions(call.video);
     if (this.state.call?.id !== call.id) return;
-    await native.startCall(call.video);
+    await native.startCall(call.video, call.id);
     try {
       const stream = await mediaDevices.getUserMedia({
         audio: true,
@@ -768,6 +791,7 @@ export class Controller {
       });
       if (this.state.call?.id !== call.id) {
         stream.getTracks().forEach((t) => t.stop());
+        stream.release();
         return;
       }
       this.local = stream;
@@ -801,6 +825,7 @@ export class Controller {
       });
       if (this.state.call?.id !== call.id) {
         stream.getTracks().forEach((t) => t.stop());
+        stream.release();
         return;
       }
       this.local = stream;
@@ -837,6 +862,38 @@ export class Controller {
     });
     await vault.set("call:" + call.id, call);
   }
+  private syncEndedCalls() {
+    const roomId = this.state.session?.id;
+    if (!roomId) return;
+    for (const record of this.state.history
+      .filter((c) => c.roomId === roomId && c.ended)
+      .sort((a, b) => (b.ended || 0) - (a.ended || 0))
+      .slice(0, 20)) {
+      const reason =
+        record.result === "ended" ||
+        record.result === "declined" ||
+        record.result === "busy" ||
+        record.result === "missed"
+          ? record.result
+          : "failed";
+      this.pendingCallEnds.set(record.id, {
+        roomId,
+        packet: { type: "call-end", id: record.id, reason },
+      });
+    }
+    this.flushCallEnds();
+  }
+  private flushCallEnds() {
+    const roomId = this.state.session?.id;
+    for (const [id, event] of this.pendingCallEnds) {
+      if (event.roomId !== roomId) {
+        this.pendingCallEnds.delete(id);
+        continue;
+      }
+      if (!this.data?.send(event.packet)) break;
+      this.pendingCallEnds.delete(id);
+    }
+  }
   async endCall(
     reason: "ended" | "declined" | "busy" | "missed" | "failed",
     notify = true
@@ -847,15 +904,29 @@ export class Controller {
       call: undefined,
       localStream: undefined,
       remoteStream: undefined,
-      presence: this.data ? "Online" : "Offline",
+      presence: !this.network
+        ? "Offline"
+        : this.data?.pc?.connectionState === "connected" &&
+          Date.now() - this.lastPong < 20000
+        ? "Online"
+        : this.state.session
+        ? "Reconnecting"
+        : "Offline",
     });
     clearTimeout(this.callTimer);
     clearTimeout(this.retryTimers.media);
     this.retryTimers.media = undefined;
-    if (notify) this.data?.send({ type: "call-end", id: call.id, reason });
+    if (notify) {
+      this.pendingCallEnds.set(call.id, {
+        roomId: call.roomId,
+        packet: { type: "call-end", id: call.id, reason },
+      });
+      this.flushCallEnds();
+    }
     this.media?.close();
     this.media = undefined;
     this.local?.getTracks().forEach((t) => t.stop());
+    this.local?.release();
     this.local = undefined;
     native.stopCall();
     await this.saveCall({ ...call, ended: Date.now(), result: reason });
@@ -898,6 +969,7 @@ export class Controller {
       this.patch({ typing: false });
     if (this.data) {
       this.data.send({ type: "ping", at: Date.now() });
+      this.flushCallEnds();
       if (Date.now() - this.lastPong > 20000) {
         this.patch({ presence: "Reconnecting", typing: false });
         this.scheduleRestart("data");
@@ -911,9 +983,18 @@ export class Controller {
       this.refreshing = Date.now();
     }
     if (this.state.call && this.media) {
-      if (this.media.pc.connectionState !== "connected")
+      const media = this.media;
+      const callId = this.state.call.id;
+      if (media.pc.connectionState !== "connected")
         this.scheduleRestart("media");
-      const stats = await this.media.pc.getStats();
+      let stats: Awaited<ReturnType<PeerLane["pc"]["getStats"]>>;
+      try {
+        stats = await media.pc.getStats();
+      } catch (error) {
+        if (this.media !== media || this.state.call?.id !== callId) return;
+        throw error;
+      }
+      if (this.media !== media || this.state.call?.id !== callId) return;
       let quality = "Connecting";
       stats.forEach((s: Record<string, unknown>) => {
         if (
@@ -972,6 +1053,7 @@ export class Controller {
     this.data?.close();
     this.media?.close();
     this.local?.getTracks().forEach((t) => t.stop());
+    this.local?.release();
     native.stopCall();
     clearInterval(this.tick);
     clearTimeout(this.callTimer);

@@ -5,6 +5,8 @@ import android.content.*
 import android.database.sqlite.SQLiteDatabase
 import android.media.*
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
@@ -44,6 +46,8 @@ class PupModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     }
     private val audio by lazy {ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager}
     private var focus: AudioFocusRequest? = null
+    private val callDeadline = Handler(Looper.getMainLooper())
+    @Volatile private var activeCallId: String? = null
     init {instance=this}
     override fun getName() = "PupNative"
     override fun getConstants(): Map<String,Any> = mapOf("version" to BuildConfig.VERSION_NAME,"build" to BuildConfig.VERSION_CODE,"inviteHost" to BuildConfig.INVITE_HOST)
@@ -82,18 +86,23 @@ class PupModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
         try {manager.notify(if(kind=="call")2 else 3,n.build())}catch(_:SecurityException){}
     }
     @ReactMethod fun clearNotifications() {(ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).apply {cancel(2);cancel(3)}}
-    @ReactMethod fun startCall(video:Boolean,p:Promise) {
+    @ReactMethod fun startCall(video:Boolean,id:String,p:Promise) {
         try {
             val activity=ctx.currentActivity
             if(activity==null || activity.isFinishing || activity.isDestroyed || ctx.lifecycleState!=LifecycleState.RESUMED) {p.reject("PUP_CALL","Open Pup Connect before starting or accepting a call.");return}
             ctx.startForegroundService(Intent(ctx,CallService::class.java).putExtra("video",video))
             audio.mode=AudioManager.MODE_IN_COMMUNICATION
             focus=AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT).setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()).setOnAudioFocusChangeListener {change->if(change<0)emit("pupInterruption",if(change==AudioManager.AUDIOFOCUS_LOSS)"ended" else "pause") else emit("pupInterruption","resume")}.build()
-            if(audio.requestAudioFocus(focus!!)!=AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {ctx.stopService(Intent(ctx,CallService::class.java));audio.mode=AudioManager.MODE_NORMAL;p.reject("PUP_AUDIO","Audio is in use by another app.");return}
+            if(audio.requestAudioFocus(focus!!)!=AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {stopCall();p.reject("PUP_AUDIO","Audio is in use by another app.");return}
+            activeCallId=id
+            callDeadline.removeCallbacksAndMessages(null)
+            // RN frame timers pause in the background; ringing must still stop.
+            callDeadline.postDelayed({if(activeCallId==id){stopCall();emit("pupCallExpired",id)}},30000)
             p.resolve(null)
-        }catch(e:Exception){p.reject("PUP_CALL","Unable to start call service.",e)}
+        }catch(e:Exception){stopCall();p.reject("PUP_CALL","Unable to start call service.",e)}
     }
-    @ReactMethod fun stopCall() {ctx.stopService(Intent(ctx,CallService::class.java));focus?.let {audio.abandonAudioFocusRequest(it)};focus=null;if(Build.VERSION.SDK_INT>=31)audio.clearCommunicationDevice() else {audio.stopBluetoothSco();audio.isSpeakerphoneOn=false};audio.mode=AudioManager.MODE_NORMAL;clearNotifications()}
+    @ReactMethod fun callConnected(id:String) {if(activeCallId==id)callDeadline.removeCallbacksAndMessages(null)}
+    @ReactMethod fun stopCall() {activeCallId=null;callDeadline.removeCallbacksAndMessages(null);ctx.stopService(Intent(ctx,CallService::class.java));focus?.let {audio.abandonAudioFocusRequest(it)};focus=null;if(Build.VERSION.SDK_INT>=31)audio.clearCommunicationDevice() else {audio.stopBluetoothSco();audio.isSpeakerphoneOn=false};audio.mode=AudioManager.MODE_NORMAL;clearNotifications()}
     @ReactMethod fun route(route:String,p:Promise) {
         try {if(Build.VERSION.SDK_INT>=31){val type=when(route){"speaker"->AudioDeviceInfo.TYPE_BUILTIN_SPEAKER;"bluetooth"->AudioDeviceInfo.TYPE_BLUETOOTH_SCO;else->AudioDeviceInfo.TYPE_BUILTIN_EARPIECE};val device=audio.availableCommunicationDevices.firstOrNull {it.type==type||(route=="bluetooth"&&it.type==AudioDeviceInfo.TYPE_BLE_HEADSET)};if(device==null||!audio.setCommunicationDevice(device)){p.reject("PUP_AUDIO","Requested audio device is unavailable.");return}}
         else {audio.isSpeakerphoneOn=route=="speaker";if(route=="bluetooth") {audio.startBluetoothSco();audio.isBluetoothScoOn=true} else {audio.stopBluetoothSco();audio.isBluetoothScoOn=false}}

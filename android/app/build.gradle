@@ -18,12 +18,7 @@ android {
         manifestPlaceholders = [inviteHost: System.getenv('PUP_INVITE_HOST') ?: 'localhost']
     }
     signingConfigs {
-        debug {
-            storeFile file(System.getProperty('user.home') + '/.android/debug.keystore')
-            storePassword 'android'
-            keyAlias 'androiddebugkey'
-            keyPassword 'android'
-        }
+        // Android Gradle Plugin owns the standard test identity; no credential values are stored here.
         if (signingReady) {
             release {
                 storeFile file(System.getenv('PUP_SIGNING_STORE'))

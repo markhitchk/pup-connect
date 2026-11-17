@@ -46,15 +46,20 @@ field = next(n for n in root.iter('node') if n.get('content-desc') == 'Display n
 adb('shell','input','keyevent','KEYCODE_MOVE_END')
 if field.get('text'):
     adb('shell','input','keyevent',*(['KEYCODE_DEL'] * len(field.get('text'))))
+time.sleep(0.5)
 adb('shell','input','text','Smoke_Pup')
+time.sleep(0.5)
 adb('shell','input','keyevent','KEYCODE_BACK')
+edited=snapshot('edited-display-name')
+expected_name=next(n.get('text') for n in edited.iter('node') if n.get('content-desc')=='Display name').strip()
+assert expected_name and expected_name != field.get('text'), 'Display name was not edited'
 tap_label('Save display name')
 adb('shell','am','force-stop','com.harleytg.pupconnect')
 adb('shell','am','start','-W','com.harleytg.pupconnect/.MainActivity')
 for _ in range(20):
     time.sleep(1)
     root = snapshot('encrypted-reload')
-    if any(n.get('content-desc') == 'Display name' and n.get('text') == 'Smoke_Pup' for n in root.iter('node')):
+    if any(n.get('content-desc') == 'Display name' and n.get('text') == expected_name for n in root.iter('node')):
         break
 else: raise AssertionError('Encrypted display name and navigation did not survive process restart')
 def fill_label(label,value):
@@ -62,7 +67,9 @@ def fill_label(label,value):
     field=next(n for n in root.iter('node') if n.get('content-desc')==label)
     adb('shell','input','keyevent','KEYCODE_MOVE_END')
     if field.get('text'): adb('shell','input','keyevent',*(['KEYCODE_DEL']*len(field.get('text'))))
+    time.sleep(0.5)
     if value: adb('shell','input','text',value)
+    time.sleep(0.5)
     adb('shell','input','keyevent','KEYCODE_BACK')
 fill_label('Signaling URL','wss://example.invalid/ws')
 tap_label('Save connection')

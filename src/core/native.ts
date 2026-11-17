@@ -11,7 +11,8 @@ interface PupNative {
   importLegacy(): Promise<void>;
   copy(text: string): void;
   scan(): Promise<string | null>;
-  startCall(video: boolean): Promise<void>;
+  startCall(video: boolean, id: string): Promise<void>;
+  callConnected(id: string): void;
   stopCall(): void;
   route(route: "speaker" | "earpiece" | "bluetooth"): Promise<void>;
   notifyEvent(kind: "call" | "message"): void;

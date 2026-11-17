@@ -12,13 +12,15 @@ GitHub Actions secrets:
 
 | Secret                        | Value                                                                                                                                                                                                                             |
 | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PUP_BETA_KEYSTORE_BASE64`    | Optional stable test keystore, base64; alias `androiddebugkey`, store/key password `android`. Only for test APKs. Without it, each clean CI runner creates an ephemeral test key and beta update compatibility is not guaranteed. |
+| `PUP_BETA_KEYSTORE_BASE64`    | Optional stable test keystore, base64; using Android Gradle Plugin’s standard debug credentials. Only for test APKs. Without it, each clean CI runner creates an ephemeral test key and beta update compatibility is not guaranteed. |
 | `PUP_RELEASE_KEYSTORE_BASE64` | Base64 of the **existing compatible** release keystore                                                                                                                                                                            |
 | `PUP_RELEASE_STORE_PASSWORD`  | Release store password                                                                                                                                                                                                            |
 | `PUP_RELEASE_KEY_ALIAS`       | Release key alias                                                                                                                                                                                                                 |
 | `PUP_RELEASE_KEY_PASSWORD`    | Release key password                                                                                                                                                                                                              |
 
 GitHub variable `PUP_INVITE_HOST` is a public domain, not a credential. Empty uses custom-scheme invitations and a non-production localhost manifest placeholder for the HTTPS filter.
+
+The delivered beta targets ARM64 and x86_64; minimum API 26. Other source-configured ABIs require their own build and device validation.
 
 The workflow runs checks, builds debug/beta, verifies the beta signature and alignment, uploads APKs and logs, and runs an Android emulator install/launch/navigation/rotation/theme/foreground smoke. It builds a production release only when release credentials exist. Secrets are not printed or uploaded. Release keystore files are removed after signing. Do not upload keystores as artifacts.
 

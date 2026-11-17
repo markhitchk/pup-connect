@@ -1115,6 +1115,17 @@ export function PupApp() {
             style={{ flex: 1 }}
             contentContainerStyle={{ flexGrow: 1, gap: 12, paddingBottom: 12 }}
           >
+            {state.error && (
+              <View style={s.card}>
+                <Text style={{ color: c.error }}>{state.error}</Text>
+                {button("Open Android permissions", () =>
+                  Linking.openSettings()
+                )}
+                {button("Dismiss call status", () =>
+                  controller.patch({ error: undefined })
+                )}
+              </View>
+            )}
             {call && (
               <>
                 {title(`${call.video ? "Video" : "Voice"} call`)}

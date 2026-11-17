@@ -193,6 +193,7 @@ test("mute and camera choices made while ringing apply before capture starts", a
     getVideoTracks: () => [video],
     getTracks: () => [audio, video],
     toURL: () => "test-stream",
+    release: jest.fn(),
   };
   const { mediaDevices } = require("react-native-webrtc");
   mediaDevices.getUserMedia.mockResolvedValueOnce(stream);
@@ -205,6 +206,7 @@ test("mute and camera choices made while ringing apply before capture starts", a
   expect(audio.enabled).toBe(false);
   expect(video.enabled).toBe(false);
   await c.endCall("ended");
+  expect(stream.release).toHaveBeenCalledTimes(1);
 });
 
 test("ICE arriving before its offer is retained and applied to the matching generation", async () => {
@@ -277,4 +279,65 @@ test("interrupted call recovery is persisted once without inventing an elapsed d
   await second.init();
   expect(second.state.history[0]).toEqual(first.state.history[0]);
   second.destroy();
+});
+
+test("call termination is retried after the data transport reconnects", async () => {
+  const { c, send } = connected();
+  const id = native.randomId();
+  await getPrivate(c).onData({ type: "call-invite", id, video: false });
+  send.mockReturnValue(false);
+  await c.endCall("ended");
+  send.mockClear();
+  send.mockReturnValue(true);
+  (c as unknown as { syncEndedCalls(): void }).syncEndedCalls();
+  expect(send).toHaveBeenCalledWith({ type: "call-end", id, reason: "ended" });
+});
+
+test("a media restart without an active call never echoes restart packets", async () => {
+  const { c } = connected();
+  const send = jest.spyOn(c.signaling, "send");
+  (c as unknown as { restart(lane: string): void }).restart("media");
+  await Promise.resolve();
+  expect(send).not.toHaveBeenCalled();
+});
+
+test("ending a call offline does not claim online presence", async () => {
+  const { c } = connected();
+  await getPrivate(c).onData({
+    type: "call-invite",
+    id: native.randomId(),
+    video: false,
+  });
+  (c as unknown as { network: boolean }).network = false;
+  await c.endCall("ended");
+  expect(c.state.presence).toBe("Offline");
+});
+
+test("ending a call during a stats poll ignores the closed-connection result", async () => {
+  const { c } = connected();
+  await getPrivate(c).onData({
+    type: "call-invite",
+    id: native.randomId(),
+    video: false,
+  });
+  let rejectStats: (e: Error) => void = () => {};
+  const stats = new Promise<Map<string, unknown>>((_, reject) => {
+    rejectStats = reject;
+  });
+  const internal = c as unknown as {
+    media: unknown;
+    lastPong: number;
+    heartbeat(): Promise<void>;
+  };
+  internal.lastPong = Date.now();
+  internal.media = {
+    pc: { connectionState: "connected", getStats: () => stats },
+    close: jest.fn(),
+  };
+  const poll = internal.heartbeat();
+  await Promise.resolve();
+  await Promise.resolve();
+  await c.endCall("ended");
+  rejectStats(Error("Peer connection closed"));
+  await expect(poll).resolves.toBeUndefined();
 });
