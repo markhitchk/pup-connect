@@ -34,7 +34,15 @@ for (const args of [
 const resources = join(root, "android/hive-resources/build.gradle");
 writeFileSync(
   resources,
-  readFileSync(resources, "utf8").replace("v0.2.+", "v0.2.6")
+  readFileSync(resources, "utf8")
+    .replace("v0.2.+", "v0.2.6")
+    // The RN adapter loads libbare-kit.so via its C ABI (dlopen); it does not
+    // compile against the SDK's Kotlin bindings. Package that AAR at runtime
+    // without exporting Kotlin 2.4 metadata to RN's Kotlin 2.2 compiler.
+    .replace(
+      'api "com.github.holepunchto.bare-kit-kotlin:',
+      'runtimeOnly "com.github.holepunchto.bare-kit-kotlin:'
+    )
 );
 // react-native-bare-kit 0.17.1 ships compileSdk 34 and the old React Maven alias.
 // Keep its native source unchanged while aligning Gradle metadata with this RN app.

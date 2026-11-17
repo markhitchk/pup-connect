@@ -51,6 +51,7 @@ function client(bootstrap) {
     b = client(bootstrap),
     c = client(bootstrap);
   let seedClosed = false;
+  let result;
   try {
     await a.send({ type: "create", name: "Host" });
     const { room } = await a.next("room");
@@ -102,23 +103,37 @@ function client(bootstrap) {
     assert.equal(restored.room.token, guest.token);
     await a.send({ type: "signal", payload: forward });
     assert.deepEqual((await b.next("signal")).payload, forward);
-    console.log(
-      JSON.stringify({
-        privateJoin: true,
-        thirdPeerRejected: true,
-        signalingBothWays: true,
-        bootstrapIndependentReconnect: true,
-      })
-    );
+    result = {
+      privateJoin: true,
+      thirdPeerRejected: true,
+      signalingBothWays: true,
+      bootstrapIndependentReconnect: true,
+    };
   } finally {
     stage = "bounded shutdown";
-    await Promise.all([a.node.stop(), b.node.stop(), c.node.stop()]);
-    await Promise.all(
-      testnet.nodes
-        .filter((n) => n !== seed || !seedClosed)
-        .map((n) => n.destroy({ force: true }))
-    );
+    let deadline;
+    try {
+      await Promise.race([
+        (async () => {
+          await Promise.all([a.node.stop(), b.node.stop(), c.node.stop()]);
+          await Promise.all(
+            testnet.nodes
+              .filter((n) => n !== seed || !seedClosed)
+              .map((n) => n.destroy({ force: true }))
+          );
+        })(),
+        new Promise((_, reject) => {
+          deadline = setTimeout(
+            () => reject(Error("Hive bounded shutdown timed out")),
+            5000
+          );
+        }),
+      ]);
+    } finally {
+      clearTimeout(deadline);
+    }
   }
+  console.log(JSON.stringify(result));
 })().catch((e) => {
   console.error(e.message);
   process.exit(1);
