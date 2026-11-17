@@ -11,6 +11,7 @@ Development branch: `react-native-migration`. Original baseline preserved in `ar
 | Controller tests | PASS: 17 | Persist before send/ack, retry/dedupe, monotonic receipts, read privacy, storage failure, restored history/settings, room isolation, call acceptance/history, capture choices, early ICE, interrupted recovery, termination retry, offline presence and ending during a stats poll |
 | React Native UI and URL tests | PASS: 4 | Four navigation screens, appearance/dialog/configuration behavior, standards-compliant custom invitation/WSS parsing; native dependencies mocked |
 | Real libwebrtc integration | PASS in CI | Real two-way DataChannel, synthetic two-way audio/video and ICE restart through signaling in an isolated Node process; not Android hardware media |
+| Actual coturn relay integration | PASS in CI | UDP and TCP client transports, member-scoped short-lived credentials, real bidirectional DataChannel/synthetic media, relay candidate statistics and ICE restart; one controlled CI host, not public NAT/TLS or Android hardware |
 | Android debug and bundled beta | PASS locally and in CI | JDK 17, SDK/target 36, minimum 26, ARM64 + x86_64; final build completed 338 tasks |
 | Beta signature and ZIP alignment | PASS locally and for downloaded CI beta | Test signature; 16 KB zip alignment. Exact artifact SHA-256 and certificate below |
 | Native ELF alignment | PASS | All 26 shared libraries in the downloaded CI beta have LOAD alignment ≥ 16 KB |
@@ -22,7 +23,7 @@ Development branch: `react-native-migration`. Original baseline preserved in `ar
 
 Locally, **32 tests pass and one real-WebRTC test explicitly skips** because this executor denies network-interface enumeration/ICE gathering. CI ran all **33 tests with no skips**. The libwebrtc test runs in a disposable Node process because the test-only native addon has a Node 24 shutdown/destructor issue; Android uses the React Native WebRTC binding instead.
 
-Final code under validation: [`d749b05`](https://github.com/markhitchk/pup-connect/commit/d749b05e36ed344cfb8e1c451a08807829036f61). CI evidence: [workflow run 44073717785](https://github.com/markhitchk/pup-connect/actions/runs/44073717785). Local proxy trust, full-JDK installation and a disk-backed Gradle cache are executor setup, not shipped app configuration.
+APK source tested in CI: [`d749b05`](https://github.com/markhitchk/pup-connect/commit/d749b05e36ed344cfb8e1c451a08807829036f61). CI evidence: [workflow run 44073717785](https://github.com/markhitchk/pup-connect/actions/runs/44073717785). Additional TURN checks: [workflow run 44078351913, checks job](https://github.com/markhitchk/pup-connect/actions/runs/44078351913/job/134022123995), source `13870e7`. Both UDP and TCP relay modes passed alongside the existing 33 tests. Only test/deployment documentation and automation changed; the delivered APK remains the previously verified binary. Local proxy trust, full-JDK installation and a disk-backed Gradle cache are executor setup, not shipped app configuration.
 
 Downloaded CI beta SHA-256: `13fc83827fa79245203cb1f0b57c4560c5beeb9339d0664f8ffb026b083063b8`. Test certificate SHA-256: `a7ea59c36c0e359acfb274b5a9ab9101aaa3b1b421c9652b3b709835341dd1a9`. This certificate is not asserted compatible with v0.1.0.
 
@@ -42,13 +43,13 @@ API 36 meets the [published Google Play target requirement](https://developer.an
 | Foreground service, private notifications, native ring timeout | Yes | Background/lock-screen, interruption and long-call tests |
 | Presence, bounded reconnect, data/media ICE recovery | Yes | Wi-Fi/mobile transitions and real network interruptions |
 | WSS signaling, membership authorization, quotas/expiry | Yes | Production DNS/TLS/host provisioning and operations |
-| STUN/coturn, short-lived credentials, relay-only mode | Yes | Real NAT traversal, TURN relay and credential-refresh tests |
+| STUN/coturn, short-lived credentials, relay-only mode | Yes | Production NAT/TLS, Android relay traffic and long-call credential-refresh tests |
 | Copy/share/private invitation, QR generation/scanning | Yes | Actual Android share/scan; scanner needs Google Play services |
 | Custom URI and optional verified HTTPS App Links | Yes | Owned domain, matching certificate and assetlinks verification |
 | APK CI and secure release configuration | Yes | Original compatible release identity and stable beta-key secret |
 | Killed-app incoming calls / offline cloud delivery | No | Separate opt-in push/identity architecture; see ARCHITECTURE.md |
 
-No production host/domain, push account, analytics or durable message backend has been provisioned. Both apps must be online for delivery. Production settings contain no embedded hostname or secret. Test-signed beta APKs are not asserted compatible with an unknown v0.1.0 signing certificate. Clean CI runners generate different test identities unless `PUP_BETA_KEYSTORE_BASE64` is configured; see SIGNING.md. No independently verified end-to-end identity/encryption claim is made.
+No production host/domain, push account, analytics or durable message backend has been provisioned. Both apps must be online for delivery. Production settings contain no embedded hostname or secret. The delivered beta certificate differs from the archived v0.1.0 certificate and cannot update that installation. The original private key remains unavailable; its known certificate fingerprint is recorded in SIGNING.md. Clean CI runners generate different test identities unless `PUP_BETA_KEYSTORE_BASE64` is configured; see SIGNING.md. No independently verified end-to-end identity/encryption claim is made.
 
 ## Physical acceptance run — NOT RUN
 

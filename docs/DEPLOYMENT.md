@@ -45,3 +45,9 @@ For verified HTTPS links:
 5. Test a privately shared link and QR on both physical phones. The `/join` fallback page can open the custom scheme and contains no analytics.
 
 Until DNS, TLS, assetlinks and the certificate are configured and verified, HTTPS App Links are **not verified**. Never advertise otherwise.
+
+## Automated relay preflight
+
+On an unrestricted Linux development/CI host with coturn (`turnserver`) and the root npm dependencies installed, run `node server/test/coturn-runner.mjs`. It starts a disposable coturn process with a random secret in a mode-600 temporary config, obtains peer-scoped credentials from the real signaling service, forces both peers to relay, verifies selected candidate types, exchanges DataChannel messages and synthetic audio/video, and restarts ICE. UDP and TCP client transports must both pass. Only outcome flags are logged; the temporary service/config are removed.
+
+This test deliberately allows a private CI interface and disables TURN TLS for its isolated local fixture. It is not a production configuration or a public-network/TLS/physical-device acceptance test. Use the hardened deployment template above for production and complete VALIDATION.md on two phones.
