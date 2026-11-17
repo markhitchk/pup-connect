@@ -1,13 +1,15 @@
 const assert = require("node:assert/strict");
 const { EventEmitter } = require("node:events");
-const DHT = require("hyperdht");
+const createTestnet = require("hyperdht/testnet");
+let stage = "initial discovery";
 const crypto = require("hypercore-crypto");
 const b4a = require("b4a");
 const { HiveNode } = require("../node.cjs");
 const until = async (fn, ms = 15000) => {
   const end = Date.now() + ms;
   while (!fn()) {
-    if (Date.now() > end) throw Error("Hive peer integration timed out");
+    if (Date.now() > end)
+      throw Error("Hive peer integration timed out at " + stage);
     await new Promise((r) => setTimeout(r, 25));
   }
 };
@@ -41,19 +43,10 @@ function client(bootstrap) {
   };
 }
 (async () => {
-  // bootstrapper requires a nonzero port; reserve an ephemeral UDP port first.
-  const socket = require("node:dgram").createSocket("udp4");
-  await new Promise((resolve, reject) => {
-    socket.once("error", reject);
-    socket.bind(0, "127.0.0.1", resolve);
-  });
-  const port = socket.address().port;
-  await new Promise((resolve) => socket.close(resolve));
-  const seed = DHT.bootstrapper(port, "127.0.0.1");
-  await seed.ready();
-  const address = seed.address();
-  assert(address);
-  const bootstrap = [{ host: "127.0.0.1", port: address.port }];
+  // Real, independently routed DHT peers; no public network dependency.
+  const testnet = await createTestnet(3);
+  const bootstrap = testnet.bootstrap;
+  const seed = testnet.nodes[0];
   const a = client(bootstrap),
     b = client(bootstrap),
     c = client(bootstrap);
@@ -61,6 +54,8 @@ function client(bootstrap) {
   try {
     await a.send({ type: "create", name: "Host" });
     const { room } = await a.next("room");
+    stage = "private admission";
+    await a.node.swarm.listen();
     await b.send({
       type: "join",
       name: "Guest",
@@ -72,6 +67,7 @@ function client(bootstrap) {
     assert.equal(guest.id, room.id);
     assert.equal(guest.hiveHost, a.node.key);
     assert.equal(guest.peerId, b.node.id);
+    stage = "third-member rejection";
     await c.send({
       type: "join",
       name: "Other",
@@ -81,6 +77,7 @@ function client(bootstrap) {
     });
     const denial = await c.next("error");
     assert.equal(denial.code, "admission");
+    stage = "bidirectional signaling";
     const forward = {
       kind: "ice",
       lane: "data",
@@ -94,6 +91,7 @@ function client(bootstrap) {
       payload: { kind: "restart", lane: "data" },
     });
     assert.equal((await a.next("signal")).payload.kind, "restart");
+    stage = "original-bootstrap outage and reconnect";
     await seed.destroy({ force: true });
     seedClosed = true;
     a.events.length = 0;
@@ -114,9 +112,13 @@ function client(bootstrap) {
     );
   } finally {
     await Promise.all([a.node.stop(), b.node.stop(), c.node.stop()]);
-    if (!seedClosed) await seed.destroy({ force: true });
+    await Promise.all(
+      testnet.nodes
+        .filter((n) => n !== seed || !seedClosed)
+        .map((n) => n.destroy({ force: true }))
+    );
   }
 })().catch((e) => {
   console.error(e.message);
-  process.exitCode = 1;
+  process.exit(1);
 });

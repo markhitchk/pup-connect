@@ -156,3 +156,17 @@ test("expired room state cannot be resumed and valid host state restores the sam
   assert.equal(x.n.saved.own, undefined);
   await x.n.stop();
 });
+
+test("failed room closure persistence neither acknowledges nor revokes the retained room", async () => {
+  const x = node();
+  await x.n.action({ type: "create", name: "Host" });
+  const room = x.room();
+  x.events.length = 0;
+  x.n.persist = async () => {
+    throw Error("storage");
+  };
+  await assert.rejects(x.n.action({ type: "close" }), /storage/);
+  assert.equal(x.n.saved.own.id, room.id);
+  assert.equal(x.events.length, 0);
+  await x.n.stop();
+});

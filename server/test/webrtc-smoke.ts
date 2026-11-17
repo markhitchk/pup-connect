@@ -20,16 +20,23 @@ async function main() {
     Boolean(turnSecret),
     "Supply both TURN test settings"
   );
-  const service = createSignaling(
-    turnUrl ? { turn: [turnUrl], turnSecret } : {}
-  );
-  service.http.listen(0, "127.0.0.1");
-  await once(service.http, "listening");
-  const addr = service.http.address();
-  assert(addr && typeof addr !== "string");
-  const url = `ws://127.0.0.1:${addr.port}/ws`;
-  const a = await client(url),
-    b = await client(url);
+  const hive = process.env.PUP_TEST_HIVE === "1";
+  assert(!(hive && turnUrl), "Hive has no central TURN configuration");
+  const { service, a, b } = hive
+    ? await require("../../hive/test/webrtc-fixture.cjs")()
+    : await (async () => {
+        const service = createSignaling(
+          turnUrl ? { turn: [turnUrl], turnSecret } : {}
+        );
+        service.http.listen(0, "127.0.0.1");
+        await once(service.http, "listening");
+        const addr = service.http.address();
+        assert(addr && typeof addr !== "string");
+        const url = `ws://127.0.0.1:${addr.port}/ws`;
+        const a = await client(url),
+          b = await client(url);
+        return { service, a, b };
+      })();
   a.send({ type: "create", name: "Test A" });
   const { room } = await a.next("room");
   b.send({
@@ -37,6 +44,7 @@ async function main() {
     name: "Test B",
     code: room.code,
     invite: room.invite,
+    ...(hive ? { hiveHost: room.hiveHost } : {}),
   });
   const { room: guestRoom } = await b.next("room");
   if (turnUrl) {
@@ -86,7 +94,7 @@ async function main() {
       });
     }
   }
-  a.socket.on("message", (raw) => {
+  a.socket.on("message", (raw: { toString(): string }) => {
     const p = JSON.parse(raw.toString());
     if (p.type === "signal")
       chainA = chainA
@@ -95,7 +103,7 @@ async function main() {
           errors.push(e);
         });
   });
-  b.socket.on("message", (raw) => {
+  b.socket.on("message", (raw: { toString(): string }) => {
     const p = JSON.parse(raw.toString());
     if (p.type === "signal")
       chainB = chainB

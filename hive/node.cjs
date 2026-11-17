@@ -453,9 +453,9 @@ class HiveNode {
     if (p.type === "leave" || p.type === "close") {
       if (room) await this.closeRoom("Room closed.");
       else {
-        if (this.saved.target?.key)
-          this.wire(this.saved.target.key, { type: "leave" });
+        const key = this.saved.target?.key;
         await this.save({ version: 1 });
+        if (key) this.wire(key, { type: "leave" });
         this.emit({ type: "closed", reason: "Left room." });
       }
       return;
@@ -471,8 +471,8 @@ class HiveNode {
   }
   async closeRoom(reason) {
     const room = this.saved.own;
-    if (room?.guest) this.wire(room.guest.key, { type: "closed", reason });
     await this.save({ version: 1 });
+    if (room?.guest) this.wire(room.guest.key, { type: "closed", reason });
     this.emit({ type: "closed", reason });
     if (this.discovery) {
       await this.discovery.destroy();
