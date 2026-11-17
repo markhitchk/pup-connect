@@ -1,57 +1,68 @@
 # Implementation checklist and release gate
 
-Development branch: `react-native-migration`. Baseline archived: `archive/java-xml-v0.1.0` at `30686f2`. This document distinguishes implemented code from observed device behavior; unchecked acceptance items block full-release status.
+Development branch: `react-native-migration`. Original baseline preserved in `archive/java-xml-v0.1.0` at `30686f2` and `legacy/java-xml/`. The 61 original source/resource files were compared by Git blob hash. `main` remains unchanged. This is a beta candidate, not a physically verified full release.
 
-## Automated results in the development executor
+## Automated results
 
-- **PASS** app TypeScript and signaling TypeScript (`npm run typecheck`).
-- **PASS** 10 signaling/protocol tests: host admission, private invitations, two-person limits, dropped-socket resume, duplicate sessions, lock/close, room and pending-request expiry, throttling, schema rejection, TURN HMAC, invitation parsing and receipt ordering.
-- **PASS** 11 controller tests: persistence-before-send, receipt monotonicity, offline queue retry, duplicate incoming messages, read privacy, storage failure without false acknowledgment, explicit incoming-call acceptance/decline, retained history/settings restoration, isolation of the outbox when rooms change, capture privacy while ringing, and ICE before SDP.
-- **PASS** 2 React Native component tests: all four navigation screens, dark-theme selection, room dialog and configuration failure handling. Native dependencies are mocked in these tests. They are **not** device communication tests.
-- **PASS** standalone server TypeScript compilation.
-- **PASS in GitHub Actions** real libwebrtc loopback DataChannel, synthetic two-way audio/video and ICE restart. The native test harness runs in an isolated Node process to avoid the test-only addon's Node 24 shutdown destructor issue. This executor cannot gather ICE candidates because network-interface enumeration is denied, so this one test explicitly skips locally; CI ran all 24 tests without skipping. This is not Android microphone/camera verification.
-- **PASS** Android debug and bundled beta compilation, ARM64 + x86_64, JDK 17 / SDK 36. Local Gradle build: 338 tasks, successful. Environment proxy trust, a full JDK and disk-backed Gradle cache were required; these local environment adjustments are not shipped in the repository.
-- **PASS** beta APK signature verification (test certificate), package `com.harleytg.pupconnect`, min SDK 26 / target 36, 16 KB APK zip alignment and native ELF LOAD segment alignment. This certificate is not asserted compatible with v0.1.0.
-- **PASS in GitHub Actions** standalone signaling container build. Production deployment is not provisioned.
-- Android emulator install/launch/navigation/rotation/theme/foreground smoke: **pending the workflow run after the SDK setup correction**. No physical device tests have run.
+| Check | Result | Scope and limits |
+| --- | --- | --- |
+| App and signaling TypeScript | PASS | `npm run typecheck`; standalone server compilation also passes |
+| Signaling/protocol tests | PASS: 11 | Admission/host approval, private invitations, limits, resume, duplicate sessions, lock/close, expiry, throttling, schemas, TURN HMAC, invitation parsing and receipt ordering |
+| Controller tests | PASS: 17 | Persist before send/ack, retry/dedupe, monotonic receipts, read privacy, storage failure, restored history/settings, room isolation, call acceptance/history, capture choices, early ICE, interrupted recovery, termination retry, offline presence and ending during a stats poll |
+| React Native UI and URL tests | PASS: 4 | Four navigation screens, appearance/dialog/configuration behavior, standards-compliant custom invitation/WSS parsing; native dependencies mocked |
+| Real libwebrtc integration | PASS in CI | Real two-way DataChannel, synthetic two-way audio/video and ICE restart through signaling in an isolated Node process; not Android hardware media |
+| Android debug and bundled beta | PASS locally and in CI | JDK 17, SDK/target 36, minimum 26, ARM64 + x86_64; final build completed 338 tasks |
+| Beta signature and ZIP alignment | PASS locally and for downloaded CI beta | Test signature; 16 KB zip alignment. Exact artifact SHA-256 and certificate below |
+| Native ELF alignment | PASS | All 26 shared libraries in the downloaded CI beta have LOAD alignment ≥ 16 KB |
+| Signaling Docker image | PASS in CI | Standalone multi-stage image build; production not provisioned |
+| Android emulator beta installation and launch | PASS in CI | API 36 x86_64 Google APIs emulator, bundled JS without Metro |
+| Native encrypted persistence | PASS in CI | Real Keystore/SQLite save, force-stop, restart and retained display name/navigation; this is not an original-certificate upgrade test |
+| Emulator navigation/lifecycle | PASS in CI | Chats/Calls/Pack/Settings, custom invitation URI parsing and join-attempt/cancel against an intentionally unreachable hostname, system theme, rotation, home/foreground, no fatal runtime errors |
+| Physical Android devices | NOT RUN | No physical device is connected to this executor |
 
-CI evidence: [24 tests and signaling container checks](https://github.com/markhitchk/pup-connect/actions/runs/44055101599). The Android job in that run stopped before compilation because the setup action requested Google's removed legacy `tools` package. The workflow now explicitly installs `platform-tools` instead. See the latest workflow run for the subsequent Android results.
+Locally, **32 tests pass and one real-WebRTC test explicitly skips** because this executor denies network-interface enumeration/ICE gathering. CI ran all **33 tests with no skips**. The libwebrtc test runs in a disposable Node process because the test-only native addon has a Node 24 shutdown/destructor issue; Android uses the React Native WebRTC binding instead.
 
-## Source checklist
+Final code under validation: [`d749b05`](https://github.com/markhitchk/pup-connect/commit/d749b05e36ed344cfb8e1c451a08807829036f61). CI evidence: [workflow run 44073717785](https://github.com/markhitchk/pup-connect/actions/runs/44073717785). Local proxy trust, full-JDK installation and a disk-backed Gradle cache are executor setup, not shipped app configuration.
 
-| Area                                                      | Implemented     | Validation remaining                                                      |
-| --------------------------------------------------------- | --------------- | ------------------------------------------------------------------------- |
-| Bare RN/TS, package ID, archive, HCF assets and palettes  | Yes             | Device visual comparison with original                                    |
-| Chats/Calls/Pack/Settings and identity, search            | Yes             | Device touch/keyboard and accessibility review                            |
-| System/light/dark, narrow/wide windows, safe areas        | Yes             | Actual rotation, split-screen, Chromebook/Samsung testing                 |
-| DataChannel messages, outbox, dedupe, receipts, typing    | Yes             | Two physical Android devices                                              |
-| SQLite + Keystore encryption; legacy history import       | Yes             | Native encryption/upgrade/device restart verification                     |
-| Voice/video, incoming/outgoing, accept/decline, controls  | Yes             | Two-way physical microphone/camera testing                                |
-| Audio route, Bluetooth, interruptions, foreground service | Yes             | Physical headset, audio focus, background and long-call checks            |
-| Presence, network backoff, data/media ICE restart         | Yes             | Real Wi-Fi → mobile and airplane-mode interruption                        |
-| WSS signaling, authorizations, quotas, TTL and heartbeat  | Yes             | Production TLS/DNS and service operations                                 |
-| STUN + coturn REST credentials, relay-only mode           | Yes             | Real coturn provision and relay traffic verification                      |
-| Copy/share invitations, QR generation/scanning            | Yes             | Installed-app share/scan on actual devices                                |
-| Custom URI + optional HTTPS verified links                | Yes             | Owned domain + actual certificate assetlinks verification                 |
-| Private notifications and permission settings             | Yes             | Android permission/lifecycle variants                                     |
-| Debug/beta/release signing workflow                       | Yes             | Compilation/signature checked; installation and original release credentials remain            |
-| Killed-app incoming calls / offline cloud delivery        | Not implemented | Separate opt-in push/identity architecture, documented in ARCHITECTURE.md |
+Downloaded CI beta SHA-256: `13fc83827fa79245203cb1f0b57c4560c5beeb9339d0664f8ffb026b083063b8`. Test certificate SHA-256: `a7ea59c36c0e359acfb274b5a9ab9101aaa3b1b421c9652b3b709835341dd1a9`. This certificate is not asserted compatible with v0.1.0.
 
-No claim of an independently verified end-to-end encryption design or compatibility with an unknown previous signing certificate is made.
+API 36 meets the [published Google Play target requirement](https://developer.android.com/google/play/requirements/target-sdk) checked November 17, 2026. Android 17/API 37 behavior has **not** been tested. Minimum-API support is configured, not verified on every Android release. The final emulator screenshots were inspected: portrait 1080×1920, landscape 1920×1080, distinct HCF light/dark palettes; the runtime fatal-error log is empty.
+
+## Implementation and outstanding validation
+
+| Area | Implemented | Still required |
+| --- | --- | --- |
+| Bare RN/TS, same package, HCF assets/palettes, branding | Yes | Physical visual comparison with the original |
+| Chats/Calls/Pack/Settings, identity, search and history | Yes | Device keyboard, touch and accessibility review |
+| System/light/dark, safe areas, responsive layout | Yes | Tablet, split-screen, Chromebook and Samsung desktop windows |
+| DataChannel chat, outbox, acknowledgments, read/typing | Yes | Two physical phones exchanging real messages |
+| Keystore-encrypted SQLite and legacy history import | Yes | Original-signed v0.1 upgrade and real-device retention tests |
+| Voice/video, incoming/outgoing, accept/decline/end | Yes | Two-way physical microphone/camera tests |
+| Audio routes, Bluetooth, camera controls, call history | Yes | Physical headset, front/rear camera and audio-focus tests |
+| Foreground service, private notifications, native ring timeout | Yes | Background/lock-screen, interruption and long-call tests |
+| Presence, bounded reconnect, data/media ICE recovery | Yes | Wi-Fi/mobile transitions and real network interruptions |
+| WSS signaling, membership authorization, quotas/expiry | Yes | Production DNS/TLS/host provisioning and operations |
+| STUN/coturn, short-lived credentials, relay-only mode | Yes | Real NAT traversal, TURN relay and credential-refresh tests |
+| Copy/share/private invitation, QR generation/scanning | Yes | Actual Android share/scan; scanner needs Google Play services |
+| Custom URI and optional verified HTTPS App Links | Yes | Owned domain, matching certificate and assetlinks verification |
+| APK CI and secure release configuration | Yes | Original compatible release identity and stable beta-key secret |
+| Killed-app incoming calls / offline cloud delivery | No | Separate opt-in push/identity architecture; see ARCHITECTURE.md |
+
+No production host/domain, push account, analytics or durable message backend has been provisioned. Both apps must be online for delivery. Production settings contain no embedded hostname or secret. Test-signed beta APKs are not asserted compatible with an unknown v0.1.0 signing certificate. Clean CI runners generate different test identities unless `PUP_BETA_KEYSTORE_BASE64` is configured; see SIGNING.md. No independently verified end-to-end identity/encryption claim is made.
 
 ## Physical acceptance run — NOT RUN
 
-Use an unrestricted production WSS/coturn deployment and two real Android devices. Record app commit, APK SHA-256, signing fingerprint, device model/Android build, network types, test time and observed results. Do not include tokens, SDP, IPs or message content in public logs.
+Use a production WSS/coturn deployment and two real Android devices. Record app commit, APK SHA-256, signing fingerprint, device model/Android build, network types, test time and observed results. Keep tokens, SDP, IPs and message bodies out of public logs.
 
-1. Install and launch on both devices. Check cold start without Metro, Android 8 where available, Samsung Galaxy/Android 17 and tablet sizing.
-2. Host creates room; guest joins using six-digit code; host approves. Repeat with invitation link and QR. Decline an unwanted code request, lock joining, try expired/invalid invitations and third-member join.
-3. Put one device on Wi-Fi and the other on mobile data. Both show real **Online** state. Exchange messages in both directions; verify timestamps, delivered/read receipts and typing privacy toggles.
-4. Kill/relaunch the client with retained data. Confirm local history and supported room resume. Never infer remote delivery from local display alone.
-5. Make two-way voice calls; test accept/decline/cancel/missed timeout, microphone mute, speaker/earpiece, actual Bluetooth headset, history, duration and quality indication.
-6. Make two-way video calls; verify both cameras, front/rear switching, disabling/enabling camera and microphone, ending from each device.
-7. Toggle airplane mode temporarily. Check stale status, backoff, restored messaging, no duplicate messages, ICE restart and call recovery. Switch Wi-Fi/mobile mid-call.
-8. Repeat in TURN relay-only mode from a fresh peer connection; verify candidate-pair type in controlled diagnostics/coturn counters. Verify sustained calls beyond credential refresh and restrictive NAT.
-9. Rotate, resize/split-screen, lock screen, background/foreground, receive a regular phone call/audio-focus interruption and deny/revoke permissions. Check no unintended microphone/camera capture or leaked service.
-10. Visit every primary screen; search conversations, edit name/connection, change theme, manage notification permissions, clear test history and verify private notification previews.
+1. Install and cold-launch on both devices without Metro. Include Android 8 where available, Samsung Galaxy/Android 17 and tablet sizing.
+2. Create a room, join by six-digit code and approve as host. Repeat with private invitation and QR; decline an unwanted request, lock the room, reject expired/invalid invitations and a third member.
+3. Put one phone on Wi-Fi and the other on mobile data. Check real Online state, two-way messages, timestamps, delivered/read receipts and typing/privacy controls.
+4. Kill/relaunch with retained data. Check history and supported room restoration. Local display alone is not remote delivery evidence.
+5. Make two-way voice calls. Test accept/decline/cancel/missed timeout, mute, speaker/earpiece, real Bluetooth, duration, quality and history.
+6. Make two-way video calls. Verify both cameras, front/rear switching, disabling/enabling capture and ending from either phone.
+7. Interrupt networking temporarily and switch Wi-Fi/mobile mid-call. Verify stale status, bounded backoff, recovery and no duplicate messages or restart loops.
+8. Repeat with TURN relay-only enabled on fresh connections. Verify actual relay candidate/coturn traffic and sustained calls beyond credential refresh.
+9. Rotate/resize, split-screen, lock, background/foreground, interrupt with a phone call, and deny/revoke permissions. Verify capture and foreground-service cleanup, including ending while disconnected.
+10. Visit every primary screen; search, edit settings, change themes, manage permissions/notifications and clear test history. Verify notification privacy.
 
-All ten acceptance criteria remain unverified on physical devices. **Do not merge to main or advertise a full operational release until this run passes.**
+All ten user acceptance criteria remain unverified on physical devices. **Do not merge to main or advertise a full operational release until this run passes.**
