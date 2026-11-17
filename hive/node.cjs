@@ -506,7 +506,11 @@ class HiveNode {
     this.stopped = true;
     clearInterval(this.timer);
     this.pending.clear();
-    await this.swarm.destroy({ force: true });
+    const closing = this.swarm.destroy({ force: true });
+    // Hyperswarm closes its listener before its DHT even with force=true.
+    // Abort DHT requests too, so unannounce cannot wait for an offline route.
+    await this.swarm.dht.destroy({ force: true });
+    await closing;
   }
 }
 module.exports = { HiveNode, MAX_FRAME };

@@ -722,13 +722,13 @@ export function PupApp() {
             true
           )}
           {toggle(
-            "Shared internet peer discovery",
+            "Use public discovery bootstrap",
             state.settings.publicDiscovery,
             () =>
               controller.settings({
                 publicDiscovery: !state.settings.publicDiscovery,
               }),
-            "Uses shared public routing peers and optional STUN discovery. Turn off for same-Wi-Fi discovery only; no outside routing or STUN requests."
+            "Starts discovery through shared public routing peers and enables configured STUN. Turn off to start through same-Wi-Fi peers without public bootstrap or STUN. Learned peer routes may still reach the internet; this is not a network firewall."
           )}
           {text("Direct-connection discovery (advanced)")}
           {text(

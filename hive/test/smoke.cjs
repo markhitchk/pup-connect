@@ -111,6 +111,7 @@ function client(bootstrap) {
       })
     );
   } finally {
+    stage = "bounded shutdown";
     await Promise.all([a.node.stop(), b.node.stop(), c.node.stop()]);
     await Promise.all(
       testnet.nodes

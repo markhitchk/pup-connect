@@ -9,6 +9,7 @@ class Swarm extends EventEmitter {
     super();
     this.dht = new EventEmitter();
     this.dht.addNode = () => {};
+    this.dht.destroy = async () => {};
     this.dht.address = () => ({ port: 1234 });
   }
   listen() {

@@ -14,7 +14,7 @@ Status: implemented on the `hive-network` development branch; native builds and 
 | Noise peer connection | Authenticated encrypted connection setup, bound to each device's public key |
 | WebRTC | Existing direct DataChannel messages and audio/video; no media acquisition before explicit call acceptance |
 
-The old mandatory WSS endpoint is removed from Settings. No Pup Connect VPS, centralized room registry, durable account service or message backend is used. Shared public DHT nodes still help a fresh internet node find its first routing peers; this is not a claim that the internet swarm has zero bootstrap participants. In local-only mode the application supplies an empty bootstrap list and omits public STUN endpoints; NSD introduces local DHT peers instead.
+The old mandatory WSS endpoint is removed from Settings. No Pup Connect VPS, centralized room registry, durable account service or message backend is used. Shared public DHT nodes still help a fresh internet node find its first routing peers; this is not a claim that the internet swarm has zero bootstrap participants. With public bootstrap disabled the application supplies an empty bootstrap list and omits configured STUN endpoints; NSD introduces same-Wi-Fi DHT peers instead. This setting changes initial discovery, not network isolation: a neighbor participating in the public DHT can introduce external routes. It must not be advertised as a firewall or guaranteed offline-only mode.
 
 ## Scope and connectivity
 

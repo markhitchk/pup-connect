@@ -22,7 +22,7 @@ Record commit, APK checksum/certificate, phone model/OS, networks, time and obse
 
 1. Install and cold-launch the bundled APK on two phones. Compare the HCF design with the original; check permissions and keyboard.
 2. Create/join by code with host approval; repeat with private key-pinned invitation, share and QR. Reject a third member, declined requests, locked and expired rooms.
-3. Test same Wi-Fi with shared internet discovery off. Then enable shared discovery and put one phone on Wi-Fi and one on mobile data. Verify actual DataChannel messages, timestamps, delivery/read receipts, typing and presence.
+3. Test same Wi-Fi with public bootstrap off. Then enable public bootstrap and put one phone on Wi-Fi and one on mobile data. Verify actual DataChannel messages, timestamps, delivery/read receipts, typing and presence.
 4. Force-stop/relaunch with retained data; check encrypted history, settings and supported room recovery. This is not an original-certificate upgrade test.
 5. Test two-way voice and video, accept/decline/cancel/missed timeout, microphone mute, speaker, real Bluetooth, front/rear camera, camera off, duration, quality and history.
 6. Interrupt/change networks and restore them. Verify status/recovery, bounded retries and no duplicated messages. Repeat while the initial discovery route is unavailable where supported.

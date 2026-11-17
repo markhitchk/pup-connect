@@ -5,7 +5,7 @@ const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 const { resolve } = require("node:path");
 test(
-  "three real hive peers: admission, encrypted signaling, cached-peer reconnect without bootstrap",
+  "three real hive peers: admission, encrypted signaling, cached-peer reconnect after original bootstrap outage",
   { timeout: 45000 },
   async (t) => {
     try {

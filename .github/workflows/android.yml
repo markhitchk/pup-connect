@@ -84,7 +84,7 @@ jobs:
           PUP_INVITE_HOST: ${{ vars.PUP_INVITE_HOST }}
         run: |
           set -o pipefail
-          ./gradlew assembleDebug assembleBeta --stacktrace --console=plain -PreactNativeArchitectures=arm64-v8a,x86_64 | tee build.log
+          ./gradlew assembleDebug assembleBeta --stacktrace --info --console=plain -PreactNativeArchitectures=arm64-v8a,x86_64 | tee build.log
       - name: Verify beta APK signature and 16 KB alignment
         run: |
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs android/app/build/outputs/apk/beta/app-beta.apk

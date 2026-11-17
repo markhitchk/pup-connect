@@ -14,7 +14,7 @@ This is a **discovery/signaling swarm**. Chat and calls still travel over direct
 2. Create Room on one device. No server address is required.
 3. Share its private invitation or QR; the invitation pins the host's public peer key. Alternatively, enter the six-digit rendezvous code and approve the request on the host. Codes are discoverable hints and are not globally unique or authenticated identities.
 4. Wait for real **Online** status before messaging or calling. Calls require explicit acceptance and contextual microphone/camera permissions.
-5. To use only the local network, disable **Shared internet peer discovery** before joining/creating a room. That also disables public STUN requests. Both devices must be on the same Wi-Fi; Wi-Fi Direct/Bluetooth discovery is not implemented.
+5. To start through same-Wi-Fi peers, disable **Use public discovery bootstrap** before joining/creating a room. That also omits configured STUN requests. Learned DHT routes may still reach the internet; this setting is not a network firewall. Wi-Fi Direct/Bluetooth discovery is not implemented.
 
 Public discovery/STUN peers can observe network metadata. Private invitations should be shared privately. No cloud chat history, push registration or killed-app wakeup service is added. Local history, hive identity and membership tokens remain encrypted with Android Keystore AES-GCM in private SQLite. A room has two members; either member explicitly leaving closes it. Room state is retained locally until its 24-hour expiration.
 
