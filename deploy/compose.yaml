@@ -1,0 +1,36 @@
+services:
+  signaling:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8080
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+  https:
+    image: caddy:2
+    ports: ['80:80', '443:443']
+    environment:
+      SIGNAL_DOMAIN: ${SIGNAL_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./public:/srv:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+    depends_on: [signaling]
+  turn:
+    image: coturn/coturn:4
+    network_mode: host
+    volumes:
+      - ./private/turnserver.conf:/etc/coturn/turnserver.conf:ro
+      - ./private/tls:/etc/coturn/tls:ro
+    command: ['-c', '/etc/coturn/turnserver.conf']
+    restart: unless-stopped
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,9 @@
+{
+  "name":"pup-connect-signaling",
+  "version":"0.2.0-beta.1",
+  "private":true,
+  "scripts":{"build":"tsc -p server/tsconfig.build.json","start":"node dist-signaling/server/src/index.js"},
+  "dependencies":{"ws":"8.18.3","zod":"4.3.6"},
+  "devDependencies":{"@types/node":"24.10.0","@types/ws":"8.18.1","typescript":"6.0.3"},
+  "engines":{"node":">=24"}
+}
