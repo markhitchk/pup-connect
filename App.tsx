@@ -62,7 +62,7 @@ export function PupApp() {
     [search, setSearch] = useState(""),
     [join, setJoin] = useState(""),
     [draft, setDraft] = useState(""),
-    [server, setServer] = useState(""),
+    [stun, setStun] = useState(""),
     [name, setName] = useState("");
   const [, setClock] = useState(0);
   const messages = useRef<FlatList>(null);
@@ -73,8 +73,8 @@ export function PupApp() {
   }, []);
   useEffect(() => {
     setName(state.settings.name);
-    setServer(state.settings.server);
-  }, [state.settings.name, state.settings.server]);
+    setStun(state.settings.stun);
+  }, [state.settings.name, state.settings.stun]);
   useEffect(() => {
     if (!state.call) return;
     const t = setInterval(() => setClock((x) => x + 1), 1000);
@@ -666,7 +666,7 @@ export function PupApp() {
             </>
           )}
       {text(
-        "Room membership and reconnects last until the room expires or the signaling service restarts. History stays on this device.",
+        "Room membership is retained on the participating devices until expiry. Both apps must be online. History stays on this device.",
         true
       )}
     </ScrollView>
@@ -716,30 +716,38 @@ export function PupApp() {
       <Text style={s.section}>CONNECTION</Text>
       {card(
         <>
-          {text("Signaling service")}
+          {text("Pup Hive · App-to-app network")}
           {text(
-            "Use the WSS address of your deployed Pup Connect server. Your peer must use the same service.",
+            "Devices find each other through same-Wi-Fi discovery and the shared peer network. Create a room and share its private invitation; no Pup Connect server URL is needed.",
+            true
+          )}
+          {toggle(
+            "Shared internet peer discovery",
+            state.settings.publicDiscovery,
+            () =>
+              controller.settings({
+                publicDiscovery: !state.settings.publicDiscovery,
+              }),
+            "Uses shared public routing peers and optional STUN discovery. Turn off for same-Wi-Fi discovery only; no outside routing or STUN requests."
+          )}
+          {text("Direct-connection discovery (advanced)")}
+          {text(
+            "Optional public STUN services help devices find an internet path. They do not carry message contents. Empty uses local network addresses only.",
             true
           )}
           <TextInput
-            accessibilityLabel="Signaling URL"
-            value={server}
-            onChangeText={setServer}
+            accessibilityLabel="STUN services"
+            value={stun}
+            onChangeText={setStun}
             autoCapitalize="none"
             autoCorrect={false}
-            keyboardType="url"
-            placeholder="wss://your-service/ws"
+            multiline
+            placeholder="stun:host:port"
             placeholderTextColor={c.hint}
-            style={s.input}
+            style={[s.input, { minHeight: 90 }]}
           />
-          {button("Save connection", () =>
-            controller.settings({ server: server.trim() })
-          )}
-          {toggle(
-            "Use TURN relay only",
-            state.settings.relayOnly,
-            () => controller.settings({ relayOnly: !state.settings.relayOnly }),
-            "Applies to new peer connections. Requires configured TURN."
+          {button("Save discovery settings", () =>
+            controller.settings({ stun: stun.trim() })
           )}
           {button(
             "Reconnect",
@@ -778,7 +786,7 @@ export function PupApp() {
           {button("Privacy & security", () =>
             Alert.alert(
               "Privacy & security",
-              "Messages use WebRTC encrypted transport. History and room tokens are encrypted using Android Keystore AES-GCM in private SQLite storage. The signaling operator can see room membership, network addresses, SDP and ICE metadata. Peer identity is not independently verified. There is no cloud message store, offline delivery, backup, or push service."
+              "Messages and calls use WebRTC encrypted transport. The hive exchanges connection information over encrypted peer connections. Shared discovery peers can observe network addresses and discovery metadata; six-digit codes are discoverable and require host approval. QR invitations pin the host peer key. History, hive identity and room tokens are encrypted on this device. There is no cloud message store or independently audited identity protection."
             )
           )}
           {button("Clear local history", () =>
@@ -853,7 +861,7 @@ export function PupApp() {
           <View style={s.address}>
             <Text style={s.badge}>P2P</Text>
             <View style={{ flex: 1 }}>
-              <Text style={[s.muted, { fontSize: 9 }]}>ROOM CONNECTION</Text>
+              <Text style={[s.muted, { fontSize: 9 }]}>HIVE CONNECTION</Text>
               <Text numberOfLines={1} style={[s.text, { fontSize: 11 }]}>
                 {state.session
                   ? `${state.session.code} · ${state.presence}`

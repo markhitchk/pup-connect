@@ -19,3 +19,6 @@ coverage/
 dist-signaling/
 **/private/
 deploy/public/.well-known/assetlinks.json
+
+hive/generated/
+android/hive-resources/

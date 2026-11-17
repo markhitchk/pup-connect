@@ -20,7 +20,7 @@ GitHub Actions secrets:
 
 GitHub variable `PUP_INVITE_HOST` is a public domain, not a credential. Empty uses custom-scheme invitations and a non-production localhost manifest placeholder for the HTTPS filter.
 
-The delivered beta targets ARM64 and x86_64; minimum API 26. Other source-configured ABIs require their own build and device validation.
+The delivered beta targets ARM64 and x86_64; minimum API 29 (Android 10) for the Hive build. Other source-configured ABIs require their own build and device validation.
 
 The workflow runs checks, builds debug/beta, verifies the beta signature and alignment, uploads APKs and logs, and runs an Android emulator install/launch/navigation/rotation/theme/foreground smoke. It builds a production release only when release credentials exist. Secrets are not printed or uploaded. Release keystore files are removed after signing. Do not upload keystores as artifacts.
 

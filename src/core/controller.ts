@@ -22,7 +22,7 @@ import {
   type Settings,
 } from "./models";
 import { native, vault } from "./native";
-import { Signaling, validateEndpoint } from "./signaling";
+import { HiveSignaling as Signaling, parseStun } from "./hive";
 import { PeerLane, type Lane } from "./rtc";
 export class Controller {
   state: AppState = {
@@ -82,8 +82,11 @@ export class Controller {
   };
   snapshot = () => this.state;
   patch(p: Partial<AppState>) {
+    const wasCalling = !!this.state.call;
     this.state = { ...this.state, ...p };
     this.listeners.forEach((l) => l());
+    if (wasCalling !== !!this.state.call)
+      this.signaling?.keepAlive(!!this.state.call || this.active);
   }
   fail = (e: unknown) => {
     this.patch({
@@ -149,9 +152,13 @@ export class Controller {
           await vault.set("call:" + previous.id, history[i]);
         }
       }
+      settings.relayOnly = false;
+      this.signaling.configure(settings.stun, settings.publicDiscovery);
+      const hiveSession = session?.hiveHost ? session : undefined;
+      if (session && !hiveSession) await vault.remove("session");
       this.patch({
         settings,
-        session: session ?? undefined,
+        session: hiveSession ?? undefined,
         conversations: await vault.all("c:"),
         messages: await vault.all("m:"),
         history,
@@ -159,8 +166,7 @@ export class Controller {
       });
       this.unsubs.push(
         NetInfo.addEventListener((info) => {
-          const online =
-            info.isConnected !== false && info.isInternetReachable !== false;
+          const online = info.isConnected !== false;
           const changed = online !== this.network;
           this.network = online;
           this.signaling.setNetwork(online);
@@ -174,6 +180,7 @@ export class Controller {
       this.unsubs.push(
         AndroidAppState.addEventListener("change", (s) => {
           this.active = s === "active";
+          this.signaling.keepAlive(this.active || !!this.state.call);
           clearTimeout(this.backgroundTimer);
           if (this.active) {
             native.clearNotifications();
@@ -232,34 +239,36 @@ export class Controller {
   }
   private restore() {
     const s = this.state.session;
-    if (!s || !this.state.settings.server || !this.network) return;
+    if (!s || !this.network) return;
     if (s.expiresAt < Date.now()) {
       this.run(() => this.closed("Room expired. Local history remains."));
       return;
     }
     if (this.state.presence === "Offline")
-      this.signaling.start(this.state.settings.server, {
+      this.signaling.start("", {
         type: "resume",
         token: s.token,
       });
   }
   async settings(update: Partial<Settings>) {
     const next = { ...this.state.settings, ...update };
-    if (next.server) next.server = validateEndpoint(next.server);
+    parseStun(next.stun);
+    if (
+      (this.state.session || this.state.waiting) &&
+      (next.stun !== this.state.settings.stun ||
+        next.publicDiscovery !== this.state.settings.publicDiscovery)
+    )
+      throw Error("Leave the current room before changing discovery settings.");
     if (!next.name.trim() || next.name.length > 40)
       throw Error("Use a display name with 1–40 characters.");
-    if (
-      next.server !== this.state.settings.server &&
-      (this.state.session || this.state.waiting)
-    )
-      throw Error("Leave the room before changing signaling services.");
-    this.patch({ settings: next });
     await vault.set("settings", next);
+    this.signaling.configure(next.stun, next.publicDiscovery);
+    this.patch({ settings: next });
     if (update.tab || update.selected) await this.markRead();
   }
   async create() {
     this.requireNewRoom();
-    this.signaling.start(this.state.settings.server, {
+    this.signaling.start("", {
       type: "create",
       name: this.state.settings.name,
     });
@@ -268,7 +277,7 @@ export class Controller {
   async join(raw: string) {
     this.requireNewRoom();
     const invitation = parseInvite(raw, native.inviteHost);
-    this.signaling.start(this.state.settings.server, {
+    this.signaling.start("", {
       type: "join",
       ...invitation,
       name: this.state.settings.name,
@@ -276,8 +285,6 @@ export class Controller {
     this.patch({ waiting: true, error: undefined });
   }
   private requireNewRoom() {
-    if (!this.state.settings.server)
-      throw Error("Set your signaling service in Settings → Connection first.");
     if (this.state.session)
       throw Error("Leave your active room before joining another.");
   }
@@ -345,9 +352,7 @@ export class Controller {
     }
     if (p.type === "error") {
       if (p.code === "expired")
-        await this.closed(
-          "Room session expired or the signaling service restarted. Local history remains."
-        );
+        await this.closed("Hive room expired. Local history remains.");
       else this.patch({ waiting: false });
     }
   }
@@ -370,7 +375,8 @@ export class Controller {
       throw Error(
         "Reconnect to leave the room. Room membership remains protected until expiry."
       );
-    await this.closed("Left room.");
+    // The local hive must commit the leave before its worker is stopped.
+    // onServer(closed) performs cleanup after that durable acknowledgement.
   }
   async closed(reason: string) {
     this.patch({ session: undefined });
@@ -389,7 +395,10 @@ export class Controller {
       typing: false,
       waiting: false,
       pending: undefined,
-      error: reason,
+      error:
+        reason === "Room closed." || reason === "Left room."
+          ? undefined
+          : reason,
     });
   }
   private newLane(lane: Lane, generation: string) {
@@ -1017,7 +1026,9 @@ export class Controller {
       native.inviteHost
         ? `https://${native.inviteHost}/join`
         : "pupconnect://join"
-    }?code=${s.code}&invite=${s.invite}`;
+    }?code=${s.code}&invite=${s.invite}${
+      s.hiveHost ? `&hive=${s.hiveHost}` : ""
+    }`;
   }
   async clearHistory() {
     if (this.state.call) throw Error("End your call before clearing history.");

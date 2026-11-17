@@ -1,3 +1,7 @@
+# Historical optional WSS deployment reference
+
+**The 0.3 Hive app does not use this service and requires no dedicated Pup Connect server.** These templates and tests are retained for the archived 0.2 design. Running them does not configure a TURN fallback for the current Hive client. See [HIVE.md](HIVE.md) for the current architecture and discovery dependencies. The App Links ownership/certificate rules below still apply; preserve the `hive` query parameter in any custom redirect.
+
 # Signaling, TURN and invitations
 
 Deploy on a Linux host with public networking, Docker Compose and a domain you control. A serverless HTTP deployment that cannot retain WebSockets/UDP is insufficient. Provisioning is not automatic and may incur your hosting provider’s charges. No hosting account or DNS is silently created.

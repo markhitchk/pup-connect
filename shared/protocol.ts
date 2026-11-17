@@ -47,6 +47,7 @@ export const clientPacket = z.discriminatedUnion("type", [
       code: codeSchema,
       name,
       invite: token.optional(),
+      hiveHost: token.optional(),
     })
     .strict(),
   z.object({ type: z.literal("resume"), token }).strict(),
@@ -75,6 +76,7 @@ export interface RoomSession {
   invite: string;
   expiresAt: number;
   locked: boolean;
+  hiveHost?: string;
   peers: { id: string; name: string; online: boolean }[];
   iceServers: IceServer[];
 }
@@ -87,6 +89,7 @@ export const roomSchema = z.object({
   invite: token,
   expiresAt: z.number(),
   locked: z.boolean(),
+  hiveHost: token.optional(),
   peers: z.array(z.object({ id, name, online: z.boolean() })).max(2),
   iceServers: z.array(
     z.object({
@@ -160,7 +163,7 @@ export function reconnectDelay(attempt: number, random = Math.random): number {
 export function parseInvite(
   raw: string,
   expectedHost?: string
-): { code: string; invite?: string } {
+): { code: string; invite?: string; hiveHost?: string } {
   if (codeSchema.safeParse(raw.trim()).success) return { code: raw.trim() };
   const u = new URL(raw.trim());
   if (
@@ -181,5 +184,8 @@ export function parseInvite(
   const invite = token
     .optional()
     .parse(u.searchParams.get("invite") ?? undefined);
-  return { code, invite };
+  const hiveHost = token
+    .optional()
+    .parse(u.searchParams.get("hive") ?? undefined);
+  return { code, invite, ...(hiveHost ? { hiveHost } : {}) };
 }

@@ -4,6 +4,9 @@ interface PupNative {
   build: number;
   inviteHost: string;
   randomId(): string;
+  randomSecret(): string;
+  hiveStart(port: number): void;
+  hiveStop(): void;
   get(key: string): Promise<string | null>;
   set(key: string, value: string): Promise<void>;
   all(prefix: string): Promise<string[]>;

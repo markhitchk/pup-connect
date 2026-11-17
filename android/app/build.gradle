@@ -10,10 +10,10 @@ android {
     namespace 'com.harleytg.pupconnect'
     defaultConfig {
         applicationId 'com.harleytg.pupconnect'
-        minSdkVersion 26
+        minSdkVersion 29
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2
-        versionName '0.2.0-beta.1'
+        versionCode 3
+        versionName '0.3.0-hive-beta.1'
         buildConfigField 'String', 'INVITE_HOST', '"' + (System.getenv('PUP_INVITE_HOST') ?: '') + '"'
         manifestPlaceholders = [inviteHost: System.getenv('PUP_INVITE_HOST') ?: 'localhost']
     }
@@ -44,6 +44,7 @@ android {
     }
 }
 dependencies {
+    implementation project(':hive-resources')
     implementation('com.facebook.react:react-android')
     implementation('com.facebook.react:hermes-android')
     implementation('com.google.android.gms:play-services-code-scanner:16.1.0')

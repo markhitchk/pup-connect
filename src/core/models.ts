@@ -4,6 +4,8 @@ export interface Settings {
   theme: "system" | "light" | "dark";
   name: string;
   server: string;
+  stun: string;
+  publicDiscovery: boolean;
   notifications: boolean;
   readReceipts: boolean;
   typing: boolean;
@@ -15,6 +17,8 @@ export const defaultSettings: Settings = {
   theme: "system",
   name: "Local_Pup",
   server: "",
+  publicDiscovery: true,
+  stun: "stun:stun.l.google.com:19302\nstun:stun.cloudflare.com:3478",
   notifications: false,
   readReceipts: true,
   typing: true,

@@ -1,53 +1,40 @@
-# Pup Connect
+# Pup Connect — Hive beta
 
-Bare React Native Android / TypeScript communication client for Harley’s Studios. Package ID: `com.harleytg.pupconnect`. Version: **0.2.0-beta.1**. No WebView.
+Bare React Native Android / TypeScript client for Harley's Studios. HCF interface, package `com.harleytg.pupconnect`, **0.3.0-hive-beta.1**, Android **10 / API 29+**. The maintained Bare mobile runtime requires API 29; the archived 0.2 build supported API 26. No WebView.
 
-**Migration development branch, not a verified full release.** The implementation includes real WebRTC DataChannel messaging and voice/video call flows. Production signaling/TURN provisioning and the two-physical-device acceptance run remain release requirements. See [validation](docs/VALIDATION.md) for results and remaining work.
+## App-to-app network
 
-## Develop
+The Hive beta removes the required WSS room server. Room creation, approval, membership and expiration run on participating devices. A native Bare worklet runs Hyperswarm/HyperDHT for distributed peer discovery and encrypted connection setup. Same-Wi-Fi discovery uses Android NSD to introduce local routing peers. Shared internet discovery uses the Holepunch public DHT bootstrap/routing peers; these are network participants, not a Pup Connect account or message backend. No hosting account, database service or paid server has been provisioned.
 
-Node 24, JDK 17 (a full JDK), Android Studio / SDK 36, build tools 36.0.0, NDK 27.1.12297006, CMake 3.22.1. Android 8.0 / API 26 minimum. React Native 0.88.1, React 19.3, react-native-webrtc 155.0.1. Gradle wrapper included.
+This is a **discovery/signaling swarm**. Chat and calls still travel over direct WebRTC DataChannels and encrypted media connections. It does not yet forward or store other users' messages or media across arbitrary intermediate phones. Restrictive NAT/firewalls can still prevent a direct connection; the beta does not promise universal Wi-Fi/mobile connectivity or secretly fall back to a central TURN relay. Keep both apps open while connecting. See [Hive architecture and limits](docs/HIVE.md).
+
+## Connect two devices
+
+1. Install the same Hive beta on both Android 10+ devices. Open Pup Connect.
+2. Create Room on one device. No server address is required.
+3. Share its private invitation or QR; the invitation pins the host's public peer key. Alternatively, enter the six-digit rendezvous code and approve the request on the host. Codes are discoverable hints and are not globally unique or authenticated identities.
+4. Wait for real **Online** status before messaging or calling. Calls require explicit acceptance and contextual microphone/camera permissions.
+5. To use only the local network, disable **Shared internet peer discovery** before joining/creating a room. That also disables public STUN requests. Both devices must be on the same Wi-Fi; Wi-Fi Direct/Bluetooth discovery is not implemented.
+
+Public discovery/STUN peers can observe network metadata. Private invitations should be shared privately. No cloud chat history, push registration or killed-app wakeup service is added. Local history, hive identity and membership tokens remain encrypted with Android Keystore AES-GCM in private SQLite. A room has two members; either member explicitly leaving closes it. Room state is retained locally until its 24-hour expiration.
+
+## Development and builds
+
+Node 24, full JDK 17, SDK/build tools 36, NDK 27.1.12297006, CMake 3.22.1.
 
 ```sh
 npm ci
 npm run typecheck
 npm test
 npm start
-# In another terminal, with a device/emulator connected:
+# With a connected Android device/emulator:
 npm run android
-```
-
-`android/local.properties` may contain your local `sdk.dir`; it is ignored. Debug uses Metro. Beta bundles JavaScript and starts without Metro:
-
-```sh
-# Standard Android debug identity, for TEST builds only:
-# Android Gradle Plugin creates its default test identity when needed.
+# Bundled, non-debuggable test APK:
 npm run android:beta
-adb install -r android/app/build/outputs/apk/beta/app-beta.apk
 ```
 
-Do not overwrite an existing debug key. Debug and beta use the test identity; production release requires the original compatible signing identity. See [signing](docs/SIGNING.md).
+`npm ci` packs the Bare worker and links its Android native addons through `hive/prepare.cjs`. Generated `hive/generated` and `android/hive-resources` are ignored; rerun `npm run hive:prepare` after changing worker code. The build pins Bare Kit Kotlin v0.2.6 and aligns the RN adapter's Gradle metadata with SDK 36. No native source is replaced by a WebView.
 
-## Connect two phones
+Unit tests cover membership/admission/privacy and existing messaging/call logic. The real three-peer integration test requires unrestricted native interface enumeration and runs in CI; a restricted executor must explicitly report the skip. Android smoke now exercises the embedded worker's local room creation, QR, durable close, persistence, navigation, rotation and themes. These are not two-physical-device or hardware-media verification.
 
-1. Deploy [signaling and coturn](docs/DEPLOYMENT.md) with TLS and real DNS.
-2. On both phones, Settings → Connection → save the same `wss://<your-domain>/ws` URL. No production hostname or secret is embedded in the APK.
-3. Create Room on the first phone. Pack shows its expiring six-digit code and private QR/link invitation.
-4. On the second phone, join with the code (host approval required), or scan/paste the private invitation (access token authorizes joining).
-5. Wait for **Online**, send text, then use Calls to start a voice/video call. Accept on the other phone. Keep both apps open while waiting for incoming communication.
-6. Use different networks for release acceptance: Wi-Fi on one, mobile data on the other. Repeat with **Use TURN relay only** enabled before establishing a fresh room connection.
-
-One room has two participants; each app has one active room. Previous conversations remain searchable on the device. Both peers must be online for delivery; locally queued outgoing messages retry while that room remains valid. Rooms expire after 24 hours, or after 10 minutes with both peers disconnected. Either peer leaving closes the room to avoid silently replacing a conversation participant. Server restarts invalidate rooms; local history remains.
-
-## Implementation
-
-- HCF palettes, vector paths, paw branding, card shapes, 56dp header, connection bar, and responsive layout derived from original resources. Requested tabs: Chats, Calls, Pack, Settings. Narrow/wide windows, safe areas, keyboard resize, system/light/dark themes.
-- Ordered reliable WebRTC DataChannel, durable local outbox, deduplication, delivered/read receipts, typing and real heartbeat/connection state.
-- Separate media PeerConnection: incoming/outgoing/accept/decline/end, audio mute/routing, Bluetooth request, camera controls, call history/duration and actual RTT quality. Foreground microphone/camera service and private call notifications.
-- Private SQLite records encrypted using Android Keystore AES-GCM, including settings and session tokens. Automatic import of original local SharedPreferences history as archived conversations. Backups disabled. No private messages in signaling or application logs.
-- Memory-only Node/WebSocket signaling, strict schemas, cryptographic codes/tokens, host authorization, room TTLs, connection/admission quotas, heartbeat cleanup and short-lived TURN credentials.
-- Custom invitation URI and optional verified HTTPS Android App Links. QR scanning uses Google Code Scanner / Google Play services; devices without it can paste an invitation or code.
-
-[Architecture and privacy](docs/ARCHITECTURE.md) · [Original audit](docs/AUDIT.md) · [Deployment](docs/DEPLOYMENT.md) · [Signing and APKs](docs/SIGNING.md) · [Validation and acceptance](docs/VALIDATION.md)
-
-The original Java/XML app is preserved under `legacy/java-xml/` and branch `archive/java-xml-v0.1.0`. It is not included as a second Android app or runtime interface.
+See [signing](docs/SIGNING.md) and [validation](docs/VALIDATION.md). Test certificates do not update an installation signed with the original v0.1 identity. Keep signing keys/passwords outside Git. The original Java/XML application remains archived under `legacy/java-xml/` and `archive/java-xml-v0.1.0`; the previous server-based beta is preserved on `react-native-migration`. The standalone server remains development/reference code and is not required by this Hive runtime.

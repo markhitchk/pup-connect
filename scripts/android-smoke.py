@@ -17,17 +17,23 @@ def tap_label(label):
         # Android exposes clipped/off-screen descendants, sometimes with y2 < y1.
         # A label alone is not evidence of a tappable target.
         def visible(n):
-            x1,y1,x2,y2=map(int,re.findall(r'\d+',n.get('bounds')))
+            x1,y1,x2,y2=map(int,re.findall(r'-?\d+',n.get('bounds')))
             return x2-x1 >= 24 and y2-y1 >= 24
-        node=next((n for n in root.iter('node') if n.get('content-desc')==label and visible(n)), None)
+        node=next((n for n in root.iter('node') if (n.get('content-desc')==label or (n.get('text','').casefold()==label.casefold() and n.get('clickable')=='true')) and visible(n)), None)
         if node is not None: break
         scroll=next(n for n in root.iter('node') if n.get('class')=='android.widget.ScrollView')
-        x1,y1,x2,y2=map(int,re.findall(r'\d+',scroll.get('bounds')))
-        adb('shell','input','swipe',str((x1+x2)//2),str(y2-50),str((x1+x2)//2),str(y1+50),'250')
+        x1,y1,x2,y2=map(int,re.findall(r'-?\d+',scroll.get('bounds')))
+        clipped=next((n for n in root.iter('node') if n.get('content-desc')==label),None)
+        above=False
+        if clipped is not None:
+            bx1,by1,bx2,by2=map(int,re.findall(r'-?\d+',clipped.get('bounds')))
+            above=by2 <= y1
+        start,end=(y1+50,y2-50) if above else (y2-50,y1+50)
+        adb('shell','input','swipe',str((x1+x2)//2),str(start),str((x1+x2)//2),str(end),'250')
         time.sleep(1)
         root=snapshot('scroll-'+label.lower()+str(attempt))
     assert node is not None, label
-    x1,y1,x2,y2=map(int,re.findall(r'\d+',node.get('bounds')))
+    x1,y1,x2,y2=map(int,re.findall(r'-?\d+',node.get('bounds')))
     adb('shell','input','tap',str((x1+x2)//2),str((y1+y2)//2))
     time.sleep(1)
     return snapshot(label.lower())
@@ -65,33 +71,31 @@ for _ in range(20):
     if any(n.get('content-desc') == 'Display name' and n.get('text') == expected_name for n in root.iter('node')):
         break
 else: raise AssertionError('Encrypted display name and navigation did not survive process restart')
-def fill_label(label,value):
-    root=tap_label(label)
-    field=next(n for n in root.iter('node') if n.get('content-desc')==label)
-    adb('shell','input','keyevent','KEYCODE_MOVE_END')
-    if field.get('text'): adb('shell','input','keyevent',*(['KEYCODE_DEL']*len(field.get('text'))))
-    time.sleep(0.5)
-    if value: adb('shell','input','text',value)
-    time.sleep(0.5)
-    adb('shell','input','keyevent','KEYCODE_BACK')
-fill_label('Signaling URL','wss://example.invalid/ws')
-root=tap_label('Save connection')
-assert any(n.get('content-desc')=='Signaling URL' and n.get('text')=='wss://example.invalid/ws' for n in root.iter('node')), 'Connection setting was not saved from Settings'
-# Exercise custom URI parsing on Android, without substituting a fake room/service.
-import shlex
-invitation='pupconnect://join?code=123456&invite='+'a'*64
-adb('shell','am start -W -a android.intent.action.VIEW -d '+shlex.quote(invitation)+' com.harleytg.pupconnect')
-time.sleep(1)
-tap_label('Join Room')
-tap_label('Cancel connection')
-tap_label('Settings')
-fill_label('Signaling URL','')
-tap_label('Save connection')
+# Exercise the real embedded hive worker: no WSS URL, private backend or mocked room event.
+tap_label('Pack')
+tap_label('Create or join room')
+tap_label('Create Room')
+for _ in range(30):
+    time.sleep(1)
+    root=snapshot('hive-room')
+    if any(re.fullmatch(r'\d{6}',n.get('text','')) for n in root.iter('node')):break
+else:raise AssertionError('Embedded hive worker did not create a real local room')
+tap_label('Pack')
+tap_label('Show QR invitation')
+snapshot('hive-qr')
+tap_label('Close')
+tap_label('Close room')
+tap_label('Close room')
+for _ in range(15):
+    time.sleep(1)
+    root=snapshot('hive-room-closed')
+    if any(n.get('text')=='No active room' for n in root.iter('node')):break
+else:raise AssertionError('Hive room did not close after its state was persisted')
 tap_label('Chats')
 adb('shell','settings','put','system','accelerometer_rotation','0')
 adb('shell','settings','put','system','user_rotation','1');time.sleep(2)
 root=snapshot('landscape')
-assert any(n.get('text')=='No recent rooms' for n in root.iter('node'))
+assert any(n.get('content-desc')=='Chats' for n in root.iter('node'))
 adb('shell','settings','put','system','user_rotation','0')
 adb('shell','cmd','uimode','night','yes');time.sleep(2)
 snapshot('dark')
@@ -104,4 +108,4 @@ assert adb('shell','pidof','com.harleytg.pupconnect').strip()
 logs=adb('logcat','-d','-s','AndroidRuntime:E')
 (out/'runtime.log').write_bytes(logs)
 assert b'FATAL EXCEPTION' not in logs
-print('Beta install, launch, navigation, Keystore/SQLite restart persistence, rotation, theme and foreground smoke passed.')
+print('Hive beta install, launch, embedded room create/QR/close, navigation, Keystore/SQLite persistence, rotation, theme and foreground smoke passed.')

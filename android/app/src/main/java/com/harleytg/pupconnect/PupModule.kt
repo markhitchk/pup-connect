@@ -46,6 +46,7 @@ class PupModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     }
     private val audio by lazy {ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager}
     private var focus: AudioFocusRequest? = null
+    private val hive by lazy {HiveDiscovery(ctx) {emit("pupHivePeer",it)}}
     private val callDeadline = Handler(Looper.getMainLooper())
     @Volatile private var activeCallId: String? = null
     init {instance=this}
@@ -55,6 +56,9 @@ class PupModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     @ReactMethod fun addListener(name:String) {}
     @ReactMethod fun removeListeners(count:Int) {}
     @ReactMethod(isBlockingSynchronousMethod=true) fun randomId():String = UUID.randomUUID().toString()
+    @ReactMethod(isBlockingSynchronousMethod=true) fun randomSecret():String {val bytes=ByteArray(32);java.security.SecureRandom().nextBytes(bytes);return bytes.joinToString("") {(it.toInt() and 255).toString(16).padStart(2,'0')}}
+    @ReactMethod fun hiveStart(port:Int) {hive.start(port)}
+    @ReactMethod fun hiveStop() {hive.stop()}
     private fun crypt(id:String, bytes:ByteArray, decrypt:Boolean=false):ByteArray {
         val cipher=Cipher.getInstance("AES/GCM/NoPadding")
         if(decrypt)cipher.init(Cipher.DECRYPT_MODE,key,GCMParameterSpec(128,bytes.copyOfRange(0,12))) else cipher.init(Cipher.ENCRYPT_MODE,key)

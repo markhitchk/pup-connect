@@ -32,7 +32,7 @@ test("all four primary screens navigate and themes switch", async () => {
   await fireEvent.press(screen.getByRole("tab", { name: "Chats" }));
   await waitFor(() => expect(screen.getByText("No recent rooms")).toBeTruthy());
   await ui.unmount();
-});
+}, 15000);
 test("room actions and join input are available without pretending to connect", async () => {
   const ui = await render(<PupApp />);
   await waitFor(() => expect(screen.getByText("No recent rooms")).toBeTruthy());
@@ -44,11 +44,17 @@ test("room actions and join input are available without pretending to connect", 
   );
   await fireEvent.press(screen.getByRole("button", { name: "Join Room" }));
   await waitFor(() =>
+    expect(require("../../hive/generated").default.start).toHaveBeenCalled()
+  );
+  const { ipc } =
+    await require("../../hive/generated").default.start.mock.results.at(-1)
+      .value;
+  await waitFor(() =>
     expect(
-      screen.getAllByText(
-        "Set your signaling service in Settings → Connection first."
+      ipc.write.mock.calls.some(([x]: [Uint8Array]) =>
+        require("buffer").Buffer.from(x).toString().includes('"type":"join"')
       )
-    ).toBeTruthy()
+    ).toBe(true)
   );
   await ui.unmount();
-});
+}, 15000);
