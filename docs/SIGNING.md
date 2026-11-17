@@ -1,6 +1,6 @@
 # Signing and beta APK builds
 
-The previous v0.1.0 signing key/certificate is not in this repository. Matching the package ID alone cannot make an APK update compatible. Obtain the **original private signing identity** for in-place updates. Do not replace it and claim compatibility.
+The previous v0.1.0 private signing key is not in this repository. Its archived signature reports identify the original certificate SHA-256 as `7dab7cd7334c035e77ceac8cf4d2140492a6972621a2a561534528e1a13bfc71` (RSA 4096, CN=Pup Connect, O=Harley's Studios). The reports do not contain the private key. Matching the package ID alone cannot make an APK update compatible. Obtain the **original private signing identity** for in-place updates. Do not replace it and claim compatibility.
 
 - `debug`: standard Android debug key, Metro required.
 - `beta`: bundled JavaScript, non-debuggable build, signed with a **test** Android debug identity; same package ID. This is installable for testing but is not a production update certificate.

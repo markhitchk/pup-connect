@@ -13,7 +13,16 @@ async function until(predicate: () => boolean, timeout = 10000) {
   }
 }
 async function main() {
-  const service = createSignaling();
+  const turnUrl = process.env.PUP_TEST_TURN_URL;
+  const turnSecret = process.env.PUP_TEST_TURN_SECRET;
+  assert.equal(
+    Boolean(turnUrl),
+    Boolean(turnSecret),
+    "Supply both TURN test settings"
+  );
+  const service = createSignaling(
+    turnUrl ? { turn: [turnUrl], turnSecret } : {}
+  );
   service.http.listen(0, "127.0.0.1");
   await once(service.http, "listening");
   const addr = service.http.address();
@@ -29,9 +38,23 @@ async function main() {
     code: room.code,
     invite: room.invite,
   });
-  await b.next("room");
-  const pcA = new wrtc.RTCPeerConnection({ iceServers: [] }),
-    pcB = new wrtc.RTCPeerConnection({ iceServers: [] });
+  const { room: guestRoom } = await b.next("room");
+  if (turnUrl) {
+    assert(room.iceServers[0]?.username);
+    assert(guestRoom.iceServers[0]?.username);
+    assert.notEqual(
+      room.iceServers[0].username,
+      guestRoom.iceServers[0].username
+    );
+  }
+  const pcA = new wrtc.RTCPeerConnection({
+      iceServers: room.iceServers,
+      iceTransportPolicy: turnUrl ? "relay" : "all",
+    }),
+    pcB = new wrtc.RTCPeerConnection({
+      iceServers: guestRoom.iceServers,
+      iceTransportPolicy: turnUrl ? "relay" : "all",
+    });
   const generation = randomUUID();
   let chainA = Promise.resolve(),
     chainB = Promise.resolve();
@@ -205,8 +228,35 @@ async function main() {
   assert.equal(atB, "real transport");
   assert.deepEqual(errors, []);
   assert(pcA.sctp?.transport.state === "connected");
+  async function assertRelay(pc: RTCPeerConnection) {
+    const stats = await pc.getStats();
+    const reports = [...stats.values()];
+    const selectedId = reports.find(
+      (s) => s.type === "transport"
+    )?.selectedCandidatePairId;
+    const pair = selectedId
+      ? stats.get(selectedId)
+      : reports.find(
+          (s) =>
+            s.type === "candidate-pair" &&
+            s.state === "succeeded" &&
+            s.nominated
+        );
+    assert(pair, "A nominated candidate pair must exist");
+    assert.equal(stats.get(pair.localCandidateId)?.candidateType, "relay");
+    assert.equal(stats.get(pair.remoteCandidateId)?.candidateType, "relay");
+  }
+  if (turnUrl) {
+    await assertRelay(pcA);
+    await assertRelay(pcB);
+  }
   // Exercise an actual ICE restart with a new SDP offer and answer.
   const restart = await pcA.createOffer({ iceRestart: true });
+  assert.notEqual(
+    restart.sdp?.match(/a=ice-ufrag:(.+)/)?.[1],
+    offer.sdp?.match(/a=ice-ufrag:(.+)/)?.[1],
+    "ICE restart must rotate credentials"
+  );
   await pcA.setLocalDescription(restart);
   a.send({
     type: "signal",
@@ -215,6 +265,10 @@ async function main() {
   await until(() => pcA.signalingState === "stable");
   channel.send("after restart");
   await until(() => atA === "ack:after restart");
+  if (turnUrl) {
+    await assertRelay(pcA);
+    await assertRelay(pcB);
+  }
   await cleanup();
   console.log(
     JSON.stringify({
@@ -222,6 +276,7 @@ async function main() {
       audioBothDirections: audioReceivedA > 0 && audioReceivedB > 0,
       videoBothDirections: videoReceivedA > 0 && videoReceivedB > 0,
       iceRestart: true,
+      ...(turnUrl ? { relayBothDirections: true } : {}),
     })
   );
   // Keep the test-only native Node addon inside a disposable process. Its V8

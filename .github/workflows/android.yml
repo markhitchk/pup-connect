@@ -24,6 +24,18 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - name: Install coturn for actual relay verification
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y coturn
+      - name: Verify real TURN relay messaging, media and ICE restart over UDP and TCP
+        run: node server/test/coturn-runner.mjs | tee turn-check.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Pup-Connect-TURN-${{ github.run_number }}
+          path: turn-check.log
+          if-no-files-found: ignore
       - run: npx tsc -p server/tsconfig.build.json
       - name: Build standalone signaling container
         run: docker build -f server/Dockerfile -t pup-connect-signaling:test .
