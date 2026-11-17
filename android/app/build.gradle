@@ -1,0 +1,55 @@
+apply plugin: 'com.android.application'
+apply plugin: 'org.jetbrains.kotlin.android'
+apply plugin: 'com.facebook.react'
+react { autolinkLibrariesWithApp(); debuggableVariants = ['debug'] }
+def signingReady = System.getenv('PUP_SIGNING_STORE') != null
+android {
+    ndkVersion rootProject.ext.ndkVersion
+    buildToolsVersion rootProject.ext.buildToolsVersion
+    compileSdk rootProject.ext.compileSdkVersion
+    namespace 'com.harleytg.pupconnect'
+    defaultConfig {
+        applicationId 'com.harleytg.pupconnect'
+        minSdkVersion 26
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 2
+        versionName '0.2.0-beta.1'
+        buildConfigField 'String', 'INVITE_HOST', '"' + (System.getenv('PUP_INVITE_HOST') ?: '') + '"'
+        manifestPlaceholders = [inviteHost: System.getenv('PUP_INVITE_HOST') ?: 'localhost']
+    }
+    signingConfigs {
+        // Android Gradle Plugin owns the standard test identity; no credential values are stored here.
+        if (signingReady) {
+            release {
+                storeFile file(System.getenv('PUP_SIGNING_STORE'))
+                storePassword System.getenv('PUP_SIGNING_STORE_PASSWORD')
+                keyAlias System.getenv('PUP_SIGNING_ALIAS')
+                keyPassword System.getenv('PUP_SIGNING_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        debug { signingConfig signingConfigs.debug }
+        beta {
+            initWith release
+            matchingFallbacks = ['release']
+            signingConfig signingConfigs.debug
+            manifestPlaceholders.usesCleartextTraffic = 'false'
+        }
+        release {
+            if (signingReady) signingConfig signingConfigs.release
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+dependencies {
+    implementation('com.facebook.react:react-android')
+    implementation('com.facebook.react:hermes-android')
+    implementation('com.google.android.gms:play-services-code-scanner:16.1.0')
+}
+tasks.configureEach { task ->
+    if (task.name == 'assembleRelease' || task.name == 'bundleRelease') {
+        task.doFirst { if (!signingReady) throw new GradleException('Configure PUP_SIGNING_* to create a release signed with your existing identity.') }
+    }
+}
