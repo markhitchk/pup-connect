@@ -172,3 +172,69 @@ test("an interrupted outbox never crosses into a different room transport", asyn
   expect(newSend).not.toHaveBeenCalled();
   expect(c.state.messages.filter((m) => m.status === "queued")).toHaveLength(1);
 });
+
+test("mute and camera choices made while ringing apply before capture starts", async () => {
+  const { c } = connected();
+  const id = native.randomId();
+  await getPrivate(c).onData({ type: "call-invite", id, video: true });
+  c.patch({
+    call: {
+      ...c.state.call!,
+      incoming: false,
+      phase: "connecting",
+      muted: true,
+      camera: false,
+    },
+  });
+  const audio = { enabled: true, stop: jest.fn() },
+    video = { enabled: true, stop: jest.fn() };
+  const stream = {
+    getAudioTracks: () => [audio],
+    getVideoTracks: () => [video],
+    getTracks: () => [audio, video],
+    toURL: () => "test-stream",
+  };
+  const { mediaDevices } = require("react-native-webrtc");
+  mediaDevices.getUserMedia.mockResolvedValueOnce(stream);
+  const internal = c as unknown as {
+    startMedia(): Promise<void>;
+    startMediaConnection(): Promise<void>;
+  };
+  internal.startMediaConnection = jest.fn(async () => {});
+  await internal.startMedia();
+  expect(audio.enabled).toBe(false);
+  expect(video.enabled).toBe(false);
+  await c.endCall("ended");
+});
+
+test("ICE arriving before its offer is retained and applied to the matching generation", async () => {
+  const c = new Controller();
+  c.patch({ session: { ...room, role: "guest" } });
+  const generation = native.randomId();
+  const handle = jest.fn(
+    async (_p: import("../../shared/protocol").RtcSignal) => {}
+  );
+  const internal = c as unknown as {
+    signal(p: import("../../shared/protocol").RtcSignal): Promise<void>;
+    newLane(lane: string, generation: string): unknown;
+  };
+  internal.newLane = () => ({ generation, handle, close: jest.fn() });
+  const ice: import("../../shared/protocol").RtcSignal = {
+    kind: "ice",
+    lane: "data",
+    generation,
+    candidate: { candidate: "candidate:test", sdpMid: "0", sdpMLineIndex: 0 },
+  };
+  await internal.signal(ice);
+  expect(handle).not.toHaveBeenCalled();
+  await internal.signal({
+    kind: "offer",
+    lane: "data",
+    generation,
+    sdp: "v=0",
+  });
+  expect(handle.mock.calls.map((args) => args[0])).toEqual([
+    { kind: "offer", lane: "data", generation, sdp: "v=0" },
+    ice,
+  ]);
+});

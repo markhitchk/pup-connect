@@ -48,6 +48,9 @@ export class Controller {
   private calling = false;
   private incoming = Promise.resolve();
   private rtcQueue = Promise.resolve();
+  private earlyIce = new Map<string, RtcSignal[]>();
+  private messageWrites = Promise.resolve();
+  private rtcAttempts = { data: 0, media: 0 };
   private tick?: ReturnType<typeof setInterval>;
   private callTimer?: ReturnType<typeof setTimeout>;
   private retryTimers: Partial<Record<Lane, ReturnType<typeof setTimeout>>> =
@@ -347,6 +350,7 @@ export class Controller {
   }
   async closed(reason: string) {
     this.patch({ session: undefined });
+    this.earlyIce.clear();
     await this.endCall("ended");
     this.data?.close();
     this.data = undefined;
@@ -384,7 +388,8 @@ export class Controller {
           .catch(this.fail);
       },
       (stream) => this.patch({ remoteStream: stream.toURL() }),
-      this.fail
+      this.fail,
+      lane === "media" ? this.state.call?.id : undefined
     );
   }
   private async offerData() {
@@ -395,18 +400,19 @@ export class Controller {
   private async signal(p: RtcSignal) {
     if (!this.state.session) return;
     if (p.kind === "restart") {
-      if (p.lane === "data" && this.state.session.role === "host") {
-        if (this.data) await this.data.offer(true);
-        else await this.offerData();
-      } else if (
-        p.lane === "media" &&
-        this.state.call &&
-        !this.state.call.incoming
-      )
-        await this.media?.offer(true);
+      this.restart(p.lane);
       return;
     }
     let lane = p.lane === "data" ? this.data : this.media;
+    const key = `${p.lane}:${p.generation}`;
+    if (p.kind === "ice" && (!lane || lane.generation !== p.generation)) {
+      if (!this.earlyIce.has(key) && this.earlyIce.size >= 4)
+        this.earlyIce.delete(this.earlyIce.keys().next().value!);
+      const buffered = this.earlyIce.get(key) || [];
+      if (buffered.length < 128) buffered.push(p);
+      this.earlyIce.set(key, buffered);
+      return;
+    }
     if (p.kind === "offer") {
       if (p.lane === "data") {
         if (this.state.session.role === "host") return;
@@ -417,12 +423,13 @@ export class Controller {
       } else {
         if (
           !this.state.call ||
-          this.state.call.id !== p.generation ||
+          this.state.call.id !== p.callId ||
           !this.state.call.incoming ||
           !this.local
         )
           return;
-        if (!lane) {
+        if (!lane || lane.generation !== p.generation) {
+          lane?.close();
           lane = this.media = this.newLane("media", p.generation);
           for (const track of this.local.getTracks())
             lane.pc.addTrack(track, this.local);
@@ -430,10 +437,17 @@ export class Controller {
       }
     }
     await lane?.handle(p);
+    if (p.kind === "offer" && lane) {
+      for (const ice of this.earlyIce.get(key) || []) await lane.handle(ice);
+      this.earlyIce.delete(key);
+    }
   }
   private laneState(lane: Lane, status: string) {
     if (lane === "data") {
       if (status === "open") {
+        clearTimeout(this.retryTimers.data);
+        this.retryTimers.data = undefined;
+        this.rtcAttempts.data = 0;
         this.lastPong = Date.now();
         this.patch({ presence: this.state.call ? "In call" : "Online" });
         this.run(() => this.flush());
@@ -453,6 +467,9 @@ export class Controller {
         this.scheduleRestart(lane);
       }
     } else if (status === "connected" && this.state.call) {
+      clearTimeout(this.retryTimers.media);
+      this.retryTimers.media = undefined;
+      this.rtcAttempts.media = 0;
       const c = {
         ...this.state.call,
         phase: "active" as const,
@@ -472,38 +489,44 @@ export class Controller {
     this.retryTimers[lane] = setTimeout(() => {
       this.retryTimers[lane] = undefined;
       this.restart(lane);
-    }, 5000);
+    }, Math.min(30000, 5000 * 2 ** Math.min(3, this.rtcAttempts[lane]++)));
   }
   private restart(lane: Lane) {
     if (!this.network || !this.state.session) return;
-    this.run(async () => {
-      if (lane === "data" && this.state.session?.role === "host") {
-        if (this.data?.pc.signalingState === "stable")
-          await this.data.offer(true);
-        else {
-          await this.offerData();
-        }
-      } else if (
-        lane === "media" &&
-        this.state.call &&
-        !this.state.call.incoming
-      )
-        await this.media?.offer(true);
-      else
-        this.signaling.send({
-          type: "signal",
-          payload: { kind: "restart", lane },
-        });
-    });
+    this.rtcQueue = this.rtcQueue
+      .then(async () => {
+        if (lane === "data" && this.state.session?.role === "host") {
+          if (this.data?.pc.signalingState === "stable")
+            await this.data.offer(true);
+          else {
+            await this.offerData();
+          }
+        } else if (
+          lane === "media" &&
+          this.state.call &&
+          !this.state.call.incoming
+        )
+          await this.startMediaConnection();
+        else
+          this.signaling.send({
+            type: "signal",
+            payload: { kind: "restart", lane },
+          });
+      })
+      .catch(this.fail);
   }
-  private async saveMessage(m: Message) {
-    await vault.set(`m:${m.roomId}:${m.id}`, m);
-    const current = this.state.messages.find((x) => x.id === m.id);
-    if (current)
-      m = { ...m, status: advanceDelivery(current.status, m.status) };
-    this.patch({
-      messages: [...this.state.messages.filter((x) => x.id !== m.id), m],
+  private saveMessage(m: Message) {
+    const task = this.messageWrites.then(async () => {
+      const current = this.state.messages.find((x) => x.id === m.id);
+      if (current)
+        m = { ...m, status: advanceDelivery(current.status, m.status) };
+      await vault.set(`m:${m.roomId}:${m.id}`, m);
+      this.patch({
+        messages: [...this.state.messages.filter((x) => x.id !== m.id), m],
+      });
     });
+    this.messageWrites = task.catch(() => {});
+    return task;
   }
   async send(body: string) {
     const session = this.state.session;
@@ -679,10 +702,12 @@ export class Controller {
       await this.permissions(video);
       if (this.state.call)
         throw Error("Another call arrived. Answer or decline it first.");
+      const session = this.snapshot().session;
+      if (!session) throw Error("Room closed before the call started.");
       await native.startCall(video);
       const call: CallState = {
         id: native.randomId(),
-        roomId: this.state.session.id,
+        roomId: session.id,
         video,
         incoming: false,
         at: Date.now(),
@@ -727,6 +752,7 @@ export class Controller {
         return;
       }
       this.local = stream;
+      this.applyCaptureChoices();
       clearTimeout(this.callTimer);
       this.callTimer = setTimeout(
         () => this.run(() => this.endCall("failed")),
@@ -759,15 +785,32 @@ export class Controller {
         return;
       }
       this.local = stream;
+      this.applyCaptureChoices();
       this.patch({ localStream: this.local.toURL() });
-      this.media = this.newLane("media", call.id);
-      for (const track of this.local.getTracks())
-        this.media.pc.addTrack(track, this.local);
-      await this.media.offer();
+      await this.startMediaConnection();
     } catch (e) {
       await this.endCall("failed");
       throw e;
     }
+  }
+  private async startMediaConnection() {
+    if (!this.state.call || !this.local || this.state.call.incoming) return;
+    this.media?.close();
+    this.media = this.newLane("media", native.randomId());
+    for (const track of this.local.getTracks())
+      this.media.pc.addTrack(track, this.local);
+    await this.media.offer();
+  }
+  private applyCaptureChoices() {
+    const call = this.state.call;
+    if (!call || !this.local) return;
+    this.facing = "user";
+    this.local.getAudioTracks().forEach((track) => {
+      track.enabled = !call.muted;
+    });
+    this.local.getVideoTracks().forEach((track) => {
+      track.enabled = call.camera;
+    });
   }
   private async saveCall(call: AppState["history"][number]) {
     this.patch({
@@ -849,6 +892,8 @@ export class Controller {
       this.refreshing = Date.now();
     }
     if (this.state.call && this.media) {
+      if (this.media.pc.connectionState !== "connected")
+        this.scheduleRestart("media");
       const stats = await this.media.pc.getStats();
       let quality = "Connecting";
       stats.forEach((s: Record<string, unknown>) => {

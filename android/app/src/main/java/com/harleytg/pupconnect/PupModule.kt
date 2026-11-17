@@ -10,6 +10,7 @@ import android.security.keystore.KeyProperties
 import android.util.Base64
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.*
+import com.facebook.react.common.LifecycleState
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.facebook.react.uimanager.ViewManager
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
@@ -79,7 +80,8 @@ class PupModule(private val ctx: ReactApplicationContext) : ReactContextBaseJava
     @ReactMethod fun clearNotifications() {(ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).apply {cancel(2);cancel(3)}}
     @ReactMethod fun startCall(video:Boolean,p:Promise) {
         try {
-            if(ctx.currentActivity?.hasWindowFocus()!=true) {p.reject("PUP_CALL","Open Pup Connect before starting or accepting a call.");return}
+            val activity=ctx.currentActivity
+            if(activity==null || activity.isFinishing || activity.isDestroyed || ctx.lifecycleState!=LifecycleState.RESUMED) {p.reject("PUP_CALL","Open Pup Connect before starting or accepting a call.");return}
             ctx.startForegroundService(Intent(ctx,CallService::class.java).putExtra("video",video))
             audio.mode=AudioManager.MODE_IN_COMMUNICATION
             focus=AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT).setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()).setOnAudioFocusChangeListener {change->if(change<0)emit("pupInterruption",if(change==AudioManager.AUDIOFOCUS_LOSS)"ended" else "pause") else emit("pupInterruption","resume")}.build()

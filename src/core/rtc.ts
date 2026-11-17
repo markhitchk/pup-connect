@@ -22,12 +22,13 @@ export class PeerLane {
     readonly lane: Lane,
     readonly generation: string,
     ice: IceServer[],
-    relayOnly: boolean,
+    private relayOnly: boolean,
     private signal: (p: RtcSignal) => void,
     private change: (status: string) => void,
     private receive: (p: DataPacket) => void,
     private stream: (s: MediaStream) => void,
-    private error: (e: unknown) => void
+    private error: (e: unknown) => void,
+    private callId?: string
   ) {
     this.pc = new RTCPeerConnection({
       iceServers: ice,
@@ -91,6 +92,7 @@ export class PeerLane {
         kind: "offer",
         lane: this.lane,
         generation: this.generation,
+        callId: this.callId,
         sdp: offer.sdp!,
       });
     } finally {
@@ -139,7 +141,10 @@ export class PeerLane {
     }
   }
   setIce(ice: IceServer[]) {
-    this.pc.setConfiguration({ iceServers: ice });
+    this.pc.setConfiguration({
+      iceServers: ice,
+      iceTransportPolicy: this.relayOnly ? "relay" : "all",
+    });
   }
   close() {
     this.closed = true;

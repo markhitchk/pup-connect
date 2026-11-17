@@ -9,6 +9,7 @@ export const rtcSignal = z.discriminatedUnion("kind", [
       kind: z.literal("offer"),
       lane: z.enum(["data", "media"]),
       generation: id,
+      callId: id.optional(),
       sdp: z.string().min(1).max(65536),
     })
     .strict(),
