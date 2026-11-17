@@ -50,6 +50,7 @@ export class Controller {
   private rtcQueue = Promise.resolve();
   private earlyIce = new Map<string, RtcSignal[]>();
   private messageWrites = Promise.resolve();
+  private clearingHistory = false;
   private rtcAttempts = { data: 0, media: 0 };
   private tick?: ReturnType<typeof setInterval>;
   private callTimer?: ReturnType<typeof setTimeout>;
@@ -132,15 +133,24 @@ export class Controller {
         await vault.remove("legacy-import");
       }
       const session = await vault.get<RoomSession>("session");
+      const history = await vault.all<AppState["history"][number]>("call:");
+      for (let i = 0; i < history.length; i++) {
+        if (!history[i].ended) {
+          const previous = history[i];
+          history[i] = {
+            ...previous,
+            ended: previous.connectedAt || previous.at,
+            result: "interrupted",
+          };
+          await vault.set("call:" + previous.id, history[i]);
+        }
+      }
       this.patch({
         settings,
         session: session ?? undefined,
         conversations: await vault.all("c:"),
         messages: await vault.all("m:"),
-        history: (await vault.all<AppState["history"][number]>("call:")).map(
-          (c) =>
-            c.ended ? c : { ...c, ended: Date.now(), result: "interrupted" }
-        ),
+        history,
         ready: true,
       });
       this.unsubs.push(
@@ -529,6 +539,7 @@ export class Controller {
     return task;
   }
   async send(body: string) {
+    if (this.clearingHistory) throw Error("History cleanup is in progress.");
     const session = this.state.session;
     if (!session) throw Error("Join a room to send a message.");
     body = body.trim();
@@ -546,13 +557,19 @@ export class Controller {
     await this.flush();
   }
   private async flush() {
+    if (this.clearingHistory) return;
     const roomId = this.state.session?.id;
     const lane = this.data;
     for (const m of this.state.messages.filter(
       (x) =>
         x.roomId === roomId && x.mine && ["queued", "sent"].includes(x.status)
     )) {
-      if (this.state.session?.id !== roomId || this.data !== lane) break;
+      if (
+        this.clearingHistory ||
+        this.state.session?.id !== roomId ||
+        this.data !== lane
+      )
+        break;
       if (lane?.send({ type: "message", id: m.id, body: m.body, at: m.at })) {
         const current = this.state.messages.find((x) => x.id === m.id)!;
         await this.saveMessage({
@@ -580,6 +597,7 @@ export class Controller {
       return;
     }
     if (p.type === "message") {
+      if (this.clearingHistory) return;
       let m = this.state.messages.find((x) => x.id === p.id);
       if (m && (m.mine || m.roomId !== session.id)) return;
       if (!m) {
@@ -649,6 +667,7 @@ export class Controller {
       await this.endCall(p.reason, false);
   }
   async markRead() {
+    if (this.clearingHistory) return;
     const id = this.state.session?.id;
     if (
       !id ||
@@ -921,10 +940,32 @@ export class Controller {
   }
   async clearHistory() {
     if (this.state.call) throw Error("End your call before clearing history.");
-    await vault.remove("m:");
-    await vault.remove("c:");
-    await vault.remove("call:");
-    this.patch({ messages: [], conversations: [], history: [] });
+    this.clearingHistory = true;
+    try {
+      await this.messageWrites;
+      await vault.remove("m:");
+      await vault.remove("c:");
+      await vault.remove("call:");
+      const session = this.state.session;
+      const active: Conversation | undefined = session
+        ? {
+            id: session.id,
+            code: session.code,
+            name:
+              session.peers.find((peer) => peer.id !== session.peerId)?.name ||
+              `Room ${session.code}`,
+            at: Date.now(),
+          }
+        : undefined;
+      if (active) await vault.set("c:" + active.id, active);
+      this.patch({
+        messages: [],
+        conversations: active ? [active] : [],
+        history: [],
+      });
+    } finally {
+      this.clearingHistory = false;
+    }
   }
   destroy() {
     this.signaling.stop();

@@ -238,3 +238,43 @@ test("ICE arriving before its offer is retained and applied to the matching gene
     ice,
   ]);
 });
+
+test("clearing history preserves the active conversation and accepts subsequent messages", async () => {
+  const { c } = connected();
+  await c.send("Delete this");
+  await c.clearHistory();
+  expect(c.state.messages).toHaveLength(0);
+  expect(c.state.conversations).toEqual([
+    expect.objectContaining({ id: room.id }),
+  ]);
+  await getPrivate(c).onData({
+    type: "message",
+    id: native.randomId(),
+    body: "Still connected",
+    at: 1000,
+  });
+  expect(c.state.messages[0].body).toBe("Still connected");
+});
+
+test("interrupted call recovery is persisted once without inventing an elapsed duration", async () => {
+  const id = native.randomId();
+  await vault.set("call:" + id, {
+    id,
+    roomId: room.id,
+    at: 1000,
+    connectedAt: 2000,
+    video: false,
+    incoming: false,
+  });
+  const first = new Controller();
+  await first.init();
+  expect(first.state.history[0]).toMatchObject({
+    result: "interrupted",
+    ended: 2000,
+  });
+  first.destroy();
+  const second = new Controller();
+  await second.init();
+  expect(second.state.history[0]).toEqual(first.state.history[0]);
+  second.destroy();
+});

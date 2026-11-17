@@ -241,7 +241,8 @@ export function createSignaling(overrides: Partial<Config> = {}) {
           error(s, "session", "Leave the current room first.");
           return;
         }
-        if (limited("admit:" + ip, 20, 600000)) {
+        const knownResume = m.type === "resume" && tokens.has(m.token);
+        if (!knownResume && limited("admit:" + ip, 20, 600000)) {
           error(s, "rate", "Too many attempts. Try later.");
           return;
         }

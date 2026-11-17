@@ -572,16 +572,18 @@ export function PupApp() {
               }`,
               true
             )}
-            {call.connectedAt &&
-              text(
-                `${Math.max(
-                  0,
-                  Math.floor(
-                    ((call.ended || Date.now()) - call.connectedAt) / 1000
-                  )
-                )} seconds`,
-                true
-              )}
+            {call.result === "interrupted"
+              ? text("Duration unavailable · interrupted", true)
+              : call.connectedAt &&
+                text(
+                  `${Math.max(
+                    0,
+                    Math.floor(
+                      ((call.ended || Date.now()) - call.connectedAt) / 1000
+                    )
+                  )} seconds`,
+                  true
+                )}
           </View>
         ))}
     </ScrollView>

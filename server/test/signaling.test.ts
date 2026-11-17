@@ -179,3 +179,20 @@ test("receipt states never regress; message and invitation validation reject bad
   );
   assert(reconnectDelay(100, () => 1) <= 36000);
 });
+
+test("a valid resume token is not blocked by room-code guessing quota", async (t) => {
+  const { url } = await harness(t);
+  const a = await client(url);
+  a.send({ type: "create", name: "Host" });
+  const { room } = await a.next("room");
+  const guesses = await client(url);
+  for (let i = 0; i < 20; i++) {
+    guesses.send({ type: "join", name: "Guess", code: room.code === "000000" ? "999999" : "000000" });
+    await guesses.next("error");
+  }
+  a.socket.close();
+  await once(a.socket, "close");
+  const resumed = await client(url);
+  resumed.send({ type: "resume", token: room.token });
+  assert.equal((await resumed.next("room")).room.id, room.id);
+});
