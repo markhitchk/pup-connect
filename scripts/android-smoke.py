@@ -1,5 +1,5 @@
 """Real adb/UI smoke against the bundled beta; no simulated networking."""
-import pathlib, subprocess, time, xml.etree.ElementTree as ET
+import pathlib, re, subprocess, time, xml.etree.ElementTree as ET
 out = pathlib.Path('android-smoke'); out.mkdir(exist_ok=True)
 def adb(*args):
     return subprocess.check_output(['adb', *args], timeout=90)
@@ -13,17 +13,20 @@ def snapshot(label):
     return root
 def tap_label(label):
     root=snapshot('before-'+label.lower())
-    for attempt in range(4):
-        node=next((n for n in root.iter('node') if n.get('content-desc')==label), None)
+    for attempt in range(6):
+        # Android exposes clipped/off-screen descendants, sometimes with y2 < y1.
+        # A label alone is not evidence of a tappable target.
+        def visible(n):
+            x1,y1,x2,y2=map(int,re.findall(r'\d+',n.get('bounds')))
+            return x2-x1 >= 24 and y2-y1 >= 24
+        node=next((n for n in root.iter('node') if n.get('content-desc')==label and visible(n)), None)
         if node is not None: break
         scroll=next(n for n in root.iter('node') if n.get('class')=='android.widget.ScrollView')
-        import re
         x1,y1,x2,y2=map(int,re.findall(r'\d+',scroll.get('bounds')))
         adb('shell','input','swipe',str((x1+x2)//2),str(y2-50),str((x1+x2)//2),str(y1+50),'250')
         time.sleep(1)
         root=snapshot('scroll-'+label.lower()+str(attempt))
     assert node is not None, label
-    import re
     x1,y1,x2,y2=map(int,re.findall(r'\d+',node.get('bounds')))
     adb('shell','input','tap',str((x1+x2)//2),str((y1+y2)//2))
     time.sleep(1)
@@ -72,7 +75,8 @@ def fill_label(label,value):
     time.sleep(0.5)
     adb('shell','input','keyevent','KEYCODE_BACK')
 fill_label('Signaling URL','wss://example.invalid/ws')
-tap_label('Save connection')
+root=tap_label('Save connection')
+assert any(n.get('content-desc')=='Signaling URL' and n.get('text')=='wss://example.invalid/ws' for n in root.iter('node')), 'Connection setting was not saved from Settings'
 # Exercise custom URI parsing on Android, without substituting a fake room/service.
 import shlex
 invitation='pupconnect://join?code=123456&invite='+'a'*64
