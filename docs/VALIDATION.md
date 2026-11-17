@@ -6,12 +6,16 @@ Development branch: `react-native-migration`. Baseline archived: `archive/java-x
 
 - **PASS** app TypeScript and signaling TypeScript (`npm run typecheck`).
 - **PASS** 10 signaling/protocol tests: host admission, private invitations, two-person limits, dropped-socket resume, duplicate sessions, lock/close, room and pending-request expiry, throttling, schema rejection, TURN HMAC, invitation parsing and receipt ordering.
-- **PASS** 9 controller tests: persistence-before-send, receipt monotonicity, offline queue retry, duplicate incoming messages, read privacy, storage failure without false acknowledgment, explicit incoming-call acceptance/decline, retained history/settings restoration, and isolation of the outbox when rooms change.
+- **PASS** 11 controller tests: persistence-before-send, receipt monotonicity, offline queue retry, duplicate incoming messages, read privacy, storage failure without false acknowledgment, explicit incoming-call acceptance/decline, retained history/settings restoration, isolation of the outbox when rooms change, capture privacy while ringing, and ICE before SDP.
 - **PASS** 2 React Native component tests: all four navigation screens, dark-theme selection, room dialog and configuration failure handling. Native dependencies are mocked in these tests. They are **not** device communication tests.
 - **PASS** standalone server TypeScript compilation.
-- **NOT VERIFIED here** real libwebrtc loopback DataChannel, synthetic two-way audio/video and ICE restart. The test was attempted; this executor denies network-interface enumeration (`uv_interface_addresses` / EPERM), so ICE cannot gather candidates. The test explicitly reports a skip in this environment and is configured to run on an unrestricted GitHub Actions runner. A skip is not a pass.
-- Android debug/beta compilation and emulator install/launch smoke: **in progress**. Results will be updated after the build.
-- Docker build/run: no Docker daemon in this executor; workflow includes the standalone signaling image build.
+- **PASS in GitHub Actions** real libwebrtc loopback DataChannel, synthetic two-way audio/video and ICE restart. The native test harness runs in an isolated Node process to avoid the test-only addon's Node 24 shutdown destructor issue. This executor cannot gather ICE candidates because network-interface enumeration is denied, so this one test explicitly skips locally; CI ran all 24 tests without skipping. This is not Android microphone/camera verification.
+- **PASS** Android debug and bundled beta compilation, ARM64 + x86_64, JDK 17 / SDK 36. Local Gradle build: 338 tasks, successful. Environment proxy trust, a full JDK and disk-backed Gradle cache were required; these local environment adjustments are not shipped in the repository.
+- **PASS** beta APK signature verification (test certificate), package `com.harleytg.pupconnect`, min SDK 26 / target 36, 16 KB APK zip alignment and native ELF LOAD segment alignment. This certificate is not asserted compatible with v0.1.0.
+- **PASS in GitHub Actions** standalone signaling container build. Production deployment is not provisioned.
+- Android emulator install/launch/navigation/rotation/theme/foreground smoke: **pending the workflow run after the SDK setup correction**. No physical device tests have run.
+
+CI evidence: [24 tests and signaling container checks](https://github.com/markhitchk/pup-connect/actions/runs/44055101599). The Android job in that run stopped before compilation because the setup action requested Google's removed legacy `tools` package. The workflow now explicitly installs `platform-tools` instead. See the latest workflow run for the subsequent Android results.
 
 ## Source checklist
 
@@ -30,7 +34,7 @@ Development branch: `react-native-migration`. Baseline archived: `archive/java-x
 | Copy/share invitations, QR generation/scanning            | Yes             | Installed-app share/scan on actual devices                                |
 | Custom URI + optional HTTPS verified links                | Yes             | Owned domain + actual certificate assetlinks verification                 |
 | Private notifications and permission settings             | Yes             | Android permission/lifecycle variants                                     |
-| Debug/beta/release signing workflow                       | Yes             | Successful artifacts, install and original release credentials            |
+| Debug/beta/release signing workflow                       | Yes             | Compilation/signature checked; installation and original release credentials remain            |
 | Killed-app incoming calls / offline cloud delivery        | Not implemented | Separate opt-in push/identity architecture, documented in ARCHITECTURE.md |
 
 No claim of an independently verified end-to-end encryption design or compatibility with an unknown previous signing certificate is made.

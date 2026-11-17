@@ -2,8 +2,10 @@ name: Pup Connect React Native checks and APKs
 on:
   push:
     branches: [main, react-native-migration]
+    paths-ignore: ["docs/**", "README.md"]
   pull_request:
     branches: [main]
+    paths-ignore: ["docs/**", "README.md"]
   workflow_dispatch:
 permissions:
   contents: read
@@ -40,6 +42,8 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
       - uses: gradle/actions/setup-gradle@v4
       - run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.1.12297006' 'cmake;3.22.1'
       - run: npm ci
